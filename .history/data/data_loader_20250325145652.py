@@ -172,7 +172,7 @@ def main():
 
     for idx, image in enumerate(tqdm(images, desc="Generating detailed image description")):
         description = generate_description(image, model, processor, device)
-        images[idx]["answer"] = description
+        image["answer"] = description
 
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(images, f, ensure_ascii=False, indent=2)

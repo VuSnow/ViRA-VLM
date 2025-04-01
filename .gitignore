@@ -1,3 +1,4 @@
 **/*.json
 data/wiki_corpus/
 modules/vncorenlp/*
+*.ipynb

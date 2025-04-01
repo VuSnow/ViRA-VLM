@@ -110,31 +110,6 @@ class WikiCorpusProcessor():
         self.load_json()
 
         print("[2] Segmenting, chunking, and collecting metadata...")
-        # for doc_id, doc in enumerate(tqdm(self.corpus[4:5], desc="Processing docs")):
-        #     title = doc.get("title", f"doc_{doc_id}")
-        #     text = doc.get("text", "")
-        #     if not text.strip():
-        #         continue
-
-        #     segmented_text = self.segment_text(text)
-        #     doc_chunks = self.chunk_by_sentence(segmented_text)
-        #     for idx, chunk in enumerate(doc_chunks):
-        #         self.chunks.append(chunk)
-        #         self.metadata.append({
-        #             "title": title,
-        #             "doc_id": doc_id,
-        #             "chunk_id": idx,
-        #             "chunk_text": chunk
-        #         })
-
-        # print("[3] Embedding chunks...")
-        # self.embeddings = self.embed_chunks(self.chunks)
-
-        # print("[4] Saving embeddings and metadata...")
-        # self.save_embeddings(embedding_path)
-        # self.save_metadata(metadata_path)
-
-        # print("✅ Done. Total chunks:", len(self.chunks))
         
         
 test = WikiCorpusProcessor()

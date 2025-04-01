@@ -15,4 +15,6 @@ pip install wikiextractor
 **Note:** Make sure you are using `Python ≤ 3.10` to avoid compatibility issues with wikiextractor. 
 
 **Example command**:
-```wikiextractor data/wiki_corpus/viwiki-latest-pages-articles.xml.bz2 -o data/wiki_corpus/extracted --json```
+```
+wikiextractor data/wiki_corpus/viwiki-latest-pages-articles.xml.bz2 -o data/wiki_corpus/extracted --json
+```

@@ -1,0 +1,8 @@
+python=3.10
+sentence_transformers
+transformers 
+tqdm
+pyvi
+py_vncorenlp
+torch
+

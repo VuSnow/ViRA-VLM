@@ -18,17 +18,18 @@ class WikiCorpusProcessor():
                  embedding_model_name: str = "dangvantuan/vietnamese-embedding",
                  segmenter_name: str = "VnCoreNLP",
                  vncorenlp_path: str = "/workspace/Vi-VLM-TTDN/modules/vncorenlp",
-                 chunk_size: int = 256,
-                 stride: int = 128,
+                 chunk_size: int = 10,
                  is_loaded = False):
         self.json_dir = json_dir
         self.embedding_model_name = embedding_model_name
         self.chunk_size = chunk_size
-        self.stride = stride
         self.segmenter_name = segmenter_name
         self.vncorenlp_path = vncorenlp_path
         self.segmenter = None
         self.is_loaded = is_loaded
+        
+        self.embedder = SentenceTransformer(self.embedding_model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name)
         
         if not self.is_loaded:
             if VnCoreNLP is None:
@@ -70,15 +71,100 @@ class WikiCorpusProcessor():
     def segment_text(self, raw_text: str):
         if self.segmenter is None:
             raise ImportError("the segmenter is None. Check the model path again")
-        return self.segmenter.word_segment(raw_text)
+        return self.segmenter.word_segment(raw_text) # return a list of segmented sentences
     
-    # def chunk_text(self, text: str):
+    def chunk_by_sentence(self, segmented_sentences: list, overlap: int = 8):
+        assert 0 <= overlap < self.chunk_size
+        step = self.chunk_size - overlap
+        chunks = []
+        last_index = 0
+        for i in range(0, len(segmented_sentences) - self.chunk_size + 1, step):
+            chunk = " ".join(segmented_sentences[i:i+self.chunk_size])
+            chunks.append(chunk)
+            last_index = i + step       
+        if last_index < len(segmented_sentences):
+            chunks.append(" ".join(segmented_sentences[-self.chunk_size:]))
+        return chunks    
+            
+    def embed_chunks(self, chunks: list[str]) -> np.ndarray:
+        embeddings = []
+        for i in tqdm(range(0, len(chunks), self.batch_size), desc="Embedding chunks"):
+            batch = chunks[i:i + self.batch_size]
+            batch_embeddings = self.embedder.encode(batch, convert_to_numpy=True, normalize_embeddings=True)
+            embeddings.append(batch_embeddings)
+        return np.vstack(embeddings).astype("float32")
+    
+    def save_embeddings(self, path: str):
+        if self.embeddings is None:
+            raise ValueError("No embeddings to save.")
+        np.save(path, self.embeddings)
         
-print(WikiCorpusProcessor())
-        
-        
-        
+    def save_metadata(self, metadata_path: str):
+        with open(metadata_path, "wb") as f:
+            pickle.dump(self.metadata, f)
+            
+    def run(self, embedding_path: str, metadata_path: str):
+        print("[1] Loading JSON corpus...")
+        self.load_json()
 
+        print("[2] Segmenting, chunking, and collecting metadata...")
+        for doc_id, doc in enumerate(tqdm(self.corpus, desc="Processing docs")):
+            title = doc.get("title", f"doc_{doc_id}")
+            text = doc.get("text", "")
+            if not text.strip():
+                continue
+
+            segmented_text = self.segment_text(text)
+            doc_chunks = self.chunk_by_sentence(segmented_text)
+            for idx, chunk in enumerate(doc_chunks):
+                self.chunks.append(chunk)
+                self.metadata.append({
+                    "title": title,
+                    "doc_id": doc_id,
+                    "chunk_id": idx,
+                    "chunk_text": chunk
+                })
+
+        print("[3] Embedding chunks...")
+        self.embeddings = self.embed_chunks(self.chunks)
+
+        print("[4] Saving embeddings and metadata...")
+        self.save_embeddings(embedding_path)
+        self.save_metadata(metadata_path)
+
+        print("✅ Done. Total chunks:", len(self.chunks))
+        
+        
+    
+    # def chunk_text_by_sentence(self, segmented_sentences: list, overlap: int = 6):
+    #     assert 0 <= overlap < self.chunk_size
+    #     step = self.chunk_size - overlap
+    #     for i in range(0, len(segmented_sentences) - self.chunk_size + 1, step):
+    #         if i + step > len(segmented_sentences) - self.chunk_size:
+    #             chunk = " ".join(segmented_sentences[-self.chunk_size:])
+    #             self.chunks.append(chunk)
+        
+    #     # print(len(segmented_sentences))
+    #     # print(i)
+            
+    # def embed_chunks(self, chunks: list[str]):
+    #     all_embeddings = []
+    #     for i in tqdm(range(0, len(chunks), 64), desc="Embedding chunks"):
+    #         batch = chunks[i:i + 64]
+    #         batch_embeddings = self.embedder.encode(
+    #             batch,
+    #             convert_to_numpy=True,
+    #             normalize_embeddings=True
+    #         )
+    #         all_embeddings.append(batch_embeddings)
+    #     self.embeddings = np.vstack(all_embeddings).astype("float32")
+    #     return self.embeddings
+        
+        
+test = WikiCorpusProcessor()
+test.run()
+    
+print(len(test.chunks))
         
         
         

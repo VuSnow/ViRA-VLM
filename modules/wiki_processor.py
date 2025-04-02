@@ -3,6 +3,7 @@ import json
 import pickle
 import numpy as np 
 import argparse
+import torch
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
@@ -16,7 +17,7 @@ except ImportError:
 class WikiCorpusProcessor():
     def __init__(self,
                  json_path: str = "/workspace/Vi-VLM-TTDN/data/wiki_corpus/saved_json/outputs.json",
-                 embedding_path: str = "/workspace/Vi-VLM-TTDN/data/outputs/wiki_embeddings.npy",
+                 embedding_path: str = "/workspace/Vi-VLM-TTDN/data/outputs/wiki_embeddings.pt",
                  metadata_path: str = "/workspace/Vi-VLM-TTDN/data/outputs/wiki_metadata.pkl",
                  embedding_model_name: str = "dangvantuan/vietnamese-embedding",
                  segmenter_name: str = "VnCoreNLP",
@@ -36,7 +37,8 @@ class WikiCorpusProcessor():
         self.overlap_ratio = 0.3
         self.overlap_tokens = int(self.max_token * self.overlap_ratio)
         
-        self.embedder = SentenceTransformer(self.embedding_model_name)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.embedder = SentenceTransformer(self.embedding_model_name, device=self.device)
         self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name)
         
         self.segmenter = None
@@ -64,7 +66,7 @@ class WikiCorpusProcessor():
             if not isinstance(data, list):
                 raise ValueError("File JSON không chứa danh sách bài viết (list of dicts).")
             
-            for article in tqdm(data, desc="Loading articles"):
+            for article in tqdm(data[0:200], desc="Loading articles"):
                 self.corpus.append(article)
             print(f"Loaded {len(self.corpus)} articles from {self.json_path}")
         except json.JSONDecodeError as e:
@@ -73,9 +75,15 @@ class WikiCorpusProcessor():
         print(f"The number of empty text in self.corpus: {len([article for article in self.corpus if not article['text']])}")
         print(f"Keys in each article information in self.corpus: {self.corpus[0].keys()}")
     
-    def segment_text(self, raw_text:str):
-        # This function returns a segmented article
-        return " ".join(self.segmenter.word_segment(raw_text))
+    def segment_text(self, raw_text: str):
+        try:
+            return " ".join(self.segmenter.word_segment(raw_text))
+        except UnicodeDecodeError as e:
+            print(f"UnicodeDecodeError at segment_text(): {e}")
+            return ""
+        except Exception as e:
+            print(f"General error in segment_text(): {e}")
+            return ""
     
     def chunk_text_by_token(self, text:str):
         # This function returns a list of passages that have the number of tokens < max_token_length
@@ -102,17 +110,30 @@ class WikiCorpusProcessor():
         
         for i in tqdm(range(0, len(chunks), self.batch_size), desc="Embedding chunks:..."):
             batch = chunks[i : i + self.batch_size]
-            batch_embeddings = self.embedder.encode(batch, convert_to_numpy=True, normalize_embeddings=True, batch_size=32)
+            batch_embeddings = self.embedder.encode(
+                batch, 
+                convert_to_tensor=True, 
+                normalize_embeddings=True, 
+                batch_size=self.batch_size,
+                device=self.device
+            )
             embeddings.append(batch_embeddings)
             
-        return np.vstack(embeddings).astype("float32")
+        return torch.cat(embeddings, dim=0)
     
     def save_embeddings(self):
         if self.embeddings is None:
             raise ValueError("No embeddings to save.")
         
         os.makedirs(os.path.dirname(self.embedding_path), exist_ok=True)
-        np.save(self.embedding_path, self.embeddings)
+        torch.save(self.embeddings, self.embedding_path)
+        print(f"Saved torch tensor embeddings to {self.embedding_path}")
+        print(f"Embedding tensor shape: {self.embeddings.shape}")
+        
+        np_path = self.embedding_path.replace(".pt", ".npy")
+        np.save(np_path, self.embeddings.cpu().numpy())
+        print(f"Saved numpy embeddings to {np_path}")
+        print(f"Embedding numpy shape: {self.embeddings.cpu().numpy().shape}")
         
     def save_metadata(self):
         os.makedirs(os.path.dirname(self.metadata_path), exist_ok=True)
@@ -154,7 +175,7 @@ class WikiCorpusProcessor():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--json_path", type=str, default="/workspace/Vi-VLM-TTDN/data/wiki_corpus/saved_json/outputs.json", help="The path of combined json file")
-    parser.add_argument("--embedding_path", type=str, default="/workspace/Vi-VLM-TTDN/data/outputs/wiki_embeddings.npy", help="The path to save npy embeddings file")
+    parser.add_argument("--embedding_path", type=str, default="/workspace/Vi-VLM-TTDN/data/outputs/wiki_embeddings.pt", help="The path to save pt embeddings file")
     parser.add_argument("--metadata_path", type=str, default="/workspace/Vi-VLM-TTDN/data/outputs/wiki_metadata.pkl", help="The path to save metadata pickle file")
     parser.add_argument("--vncore_path", type=str, default="/workspace/Vi-VLM-TTDN/modules/vncorenlp", help="The path to save vncorenlp model")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")

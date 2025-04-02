@@ -18,3 +18,18 @@ pip install wikiextractor
 ```
 wikiextractor data/wiki_corpus/viwiki-latest-pages-articles.xml.bz2 -o data/wiki_corpus/extracted --json
 ```
+
+## Combining all the extracted json files into 1 file:
+After extracting corpus using `wikiextractor`, each file in `data/wiki_corpus/extracted/` contains multiple lines, where each line is a JSON object representing one Wikipedia article.
+To combine all these JSON lines into a single JSON array (and discard entries with empty `text` fields), run the following command:
+```
+python data/wiki_corpus_combine.py \
+    --extracted_dir data/wiki_corpus/extracted \
+    --output_dir data/wiki_corpus/saved_json \
+    --file_name outputs.json
+```
+After the script finishes, you will get a single file in:
+```
+data/wiki_corpus/saved_json/outputs.json
+```
+The file contains an array of cleaned Wikipedia articles in Vietnamese, ready for downstream processing.

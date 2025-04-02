@@ -2,6 +2,7 @@ import os
 import json
 import pickle
 import numpy as np 
+import argparse
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
@@ -14,17 +15,20 @@ except ImportError:
 
 class WikiCorpusProcessor():
     def __init__(self,
-                 json_dir: str = "/workspace/Vi-VLM-TTDN/data/wiki_corpus/extracted",
+                 json_path: str = "/workspace/Vi-VLM-TTDN/data/wiki_corpus/saved_json/outputs.json",
+                 embedding_path: str = "/workspace/Vi-VLM-TTDN/data/outputs/wiki_embeddings.npy",
+                 metadata_path: str = "/workspace/Vi-VLM-TTDN/data/outputs/wiki_metadata.pkl",
                  embedding_model_name: str = "dangvantuan/vietnamese-embedding",
                  segmenter_name: str = "VnCoreNLP",
                  vncorenlp_path: str = "/workspace/Vi-VLM-TTDN/modules/vncorenlp",
-                 batch_size: int = 64,
-                 is_loaded = False):
-        self.json_dir = json_dir
+                 batch_size: int = 32,
+                 is_loaded: bool = False):
+        self.json_path = json_path
+        self.embedding_path = embedding_path
+        self.metadata_path = metadata_path
         self.embedding_model_name = embedding_model_name
         self.segmenter_name = segmenter_name
         self.vncorenlp_path = vncorenlp_path
-        self.segmenter = None
         self.is_loaded = is_loaded
         self.batch_size = batch_size
         
@@ -35,6 +39,7 @@ class WikiCorpusProcessor():
         self.embedder = SentenceTransformer(self.embedding_model_name)
         self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name)
         
+        self.segmenter = None
         if not self.is_loaded:
             if VnCoreNLP is None:
                 raise ImportError("VnCoreNLP is not installed. Please intall it with `pip install py_vncorenlp`")
@@ -49,122 +54,120 @@ class WikiCorpusProcessor():
         self.metadata = []
         self.embeddings = None
         
-        # self.load_json()
+    def load_data(self):
+        if not os.path.isfile(self.json_path):
+            raise FileNotFoundError(f"File not found: {self.json_path}")
         
-    def load_json(self):
-        all_docs = []
-        for root, dirs, files in os.walk(self.json_dir):
-            for filename in tqdm(files):
-                file_path = os.path.join(root, filename)
-                with open(file_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            data = json.loads(line)
-                            if isinstance(data, dict):
-                                all_docs.append(data)
-                        except json.JSONDecodeError as e:
-                            print(f"[WARNING] Skipping malformed line in {filename}: {e}")
-
+        try:
+            with open(self.json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                raise ValueError("File JSON không chứa danh sách bài viết (list of dicts).")
+            
+            for article in tqdm(data, desc="Loading articles"):
+                self.corpus.append(article)
+            print(f"Loaded {len(self.corpus)} articles from {self.json_path}")
+        except json.JSONDecodeError as e:
+            print(f"JSON Decode Error: {e} in file {self.json_path}")
         
-        self.corpus = all_docs[0:2000]
-        print(f"The keys in each article dictionary{self.corpus[2].keys()}")
-        print(f"The number of articles: {len(self.corpus)}")
+        print(f"The number of empty text in self.corpus: {len([article for article in self.corpus if not article['text']])}")
+        print(f"Keys in each article information in self.corpus: {self.corpus[0].keys()}")
     
-    def segment_text(self, raw_text: str) -> str:
-        if self.segmenter is None:
-            raise ImportError("the segmenter is None. Check the model path again")
-        # because segmenter return a list of segmented sentence in text so we have to join them
-        # return a list of segmented sentences
-        segmented_list = self.segmenter.word_segment(raw_text)
-        return " ".join(segmented_list)
+    def segment_text(self, raw_text:str):
+        # This function returns a segmented article
+        return " ".join(self.segmenter.word_segment(raw_text))
     
-    def chunk_text_by_token(self, text: str):
+    def chunk_text_by_token(self, text:str):
+        # This function returns a list of passages that have the number of tokens < max_token_length
         input_ids = self.tokenizer(text, return_attention_mask=False, return_token_type_ids=False)["input_ids"]
         chunks = []
+        step = self.max_token - self.overlap_tokens
         
-        i = 0
-        while i < len(input_ids):
+        for i in range(0, len(input_ids) - self.max_token + 1, step):
+            
             window = input_ids[i : i + self.max_token]
             chunk_text = self.tokenizer.decode(window, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             chunks.append(chunk_text)
-            i += (self.max_token - self.overlap_tokens)
-            # i += (self.max_token - self.overlap_tokens)
-        
+            
+        if len(input_ids) > 0 and (len(input_ids) - self.max_token) % step != 0:
+            last_window = input_ids[-self.max_token:]
+            chunk_text = self.tokenizer.decode(last_window, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            if chunk_text not in chunks:
+                chunks.append(chunk_text)
+                
         return chunks
     
     def embed_chunks(self, chunks: list[str]):
         embeddings = []
-        for i in tqdm(range(0, len(chunks), self.batch_size), desc="Embedding chunks..."):
+        
+        for i in tqdm(range(0, len(chunks), self.batch_size), desc="Embedding chunks:..."):
             batch = chunks[i : i + self.batch_size]
-            batch_embeddings = self.embedder.encode(batch, convert_to_numpy=True, normalize_embeddings=True)
+            batch_embeddings = self.embedder.encode(batch, convert_to_numpy=True, normalize_embeddings=True, batch_size=32)
             embeddings.append(batch_embeddings)
             
         return np.vstack(embeddings).astype("float32")
     
-    def save_embeddings(self, path: str):
+    def save_embeddings(self):
         if self.embeddings is None:
             raise ValueError("No embeddings to save.")
-        np.save(path, self.embeddings)
-
-    def save_metadata(self, path: str):
-        with open(path, "wb") as f:
+        
+        os.makedirs(os.path.dirname(self.embedding_path), exist_ok=True)
+        np.save(self.embedding_path, self.embeddings)
+        
+    def save_metadata(self):
+        os.makedirs(os.path.dirname(self.metadata_path), exist_ok=True)
+        with open(self.metadata_path, "wb") as f:
             pickle.dump(self.metadata, f)
-            
-    def run(self, embedding_path: str, metadata_path: str):
-        print("[1] Loading corpus...")
-        self.load_json()
-        skipped_empty_docs = 0
-        skipped_empty_chunks = 0
-        total_chunks = 0
-
-        print("[2] Segmenting, chunking, and collecting metadata...")
+        print(f"Saved metadata to {self.metadata_path}")
+        
+    def run(self):
+        print("[1] Loading Wiki Corpus from json file...")
+        self.load_data()
+        
+        print("[2] Chunking by token and collecting metadata...")
         for doc in tqdm(self.corpus, desc="Processing documents"):
-            doc_id = doc.get("id", "")
-            title = doc.get("title", f"doc_{doc_id}")
-            text = doc.get("text", "")
-            if not text or len(text) < 10:
-                skipped_empty_docs += 1
-                print(f"Not text or len < 10, doc_id: {doc_id}")
+            title = doc["title"]
+            doc_id = int(doc["id"])
+            text = doc["text"]
+            if not text.strip():
                 continue
-
-        #     segmented = self.segment_text(text)
-        #     chunks = self.chunk_text_by_token(segmented)
-        #     for idx, chunk in enumerate(chunks):
-        #         if chunk and chunk.strip(): # Thêm kiểm tra chunk không rỗng
-        #             self.chunks.append(chunk)
-        #             self.metadata.append({
-        #                 "title": title,
-        #                 "doc_id": doc_id,
-        #                 "chunk_id": idx,
-        #                 "chunk_text": chunk
-        #             })
-        #             total_chunks += 1
-        #         else:
-        #             skipped_empty_chunks += 1
-        #             print(f"[WARNING] Skipping empty chunk from doc_id {doc_id}, title '{title}'") 
+            
+            segmented_text = self.segment_text(text)
+            chunks = self.chunk_text_by_token(segmented_text)
+            for idx, chunk in enumerate(chunks):
+                self.chunks.append(chunk)
+                self.metadata.append({
+                    "title": title,
+                    "doc_id": doc_id,
+                    "chunk_id": idx,
+                    "chunk_text": chunk
+                })
+        print(f"Total chunks: {len(self.chunks)}")
         
-        # print(f"[INFO] Skipped {skipped_empty_docs} empty docs")
-        # print(f"[INFO] Skipped {skipped_empty_chunks} empty chunks")
-        # print(f"[INFO] Total processed chunks: {total_chunks}")
-
-        # print("[3] Embedding chunks...")
-        # self.embeddings = self.embed_chunks(self.chunks)
-
-        # print("[4] Saving data...")
-        # self.save_embeddings(embedding_path)
-        # self.save_metadata(metadata_path)
-
-        # print(f"✅ Done. Total chunks: {len(self.chunks)}")
+        print("[3] Embedding chunks...")
+        self.embeddings = self.embed_chunks(self.chunks)
         
-        
-test = WikiCorpusProcessor()
-test.run(embedding_path="/workspace/Vi-VLM-TTDN/outputs/wiki_embeddings.npy", metadata_path="/workspace/Vi-VLM-TTDN/outputs/wiki_metadata.pkl")
+        print("[4] Saving data...")
+        self.save_embeddings()
+        self.save_metadata()
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--json_path", type=str, default="/workspace/Vi-VLM-TTDN/data/wiki_corpus/saved_json/outputs.json", help="The path of combined json file")
+    parser.add_argument("--embedding_path", type=str, default="/workspace/Vi-VLM-TTDN/data/outputs/wiki_embeddings.npy", help="The path to save npy embeddings file")
+    parser.add_argument("--metadata_path", type=str, default="/workspace/Vi-VLM-TTDN/data/outputs/wiki_metadata.pkl", help="The path to save metadata pickle file")
+    parser.add_argument("--vncore_path", type=str, default="/workspace/Vi-VLM-TTDN/modules/vncorenlp", help="The path to save vncorenlp model")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    args = parser.parse_args()
     
-# print(len(test.chunks))
-        
-        
-        
-        
+    processor = WikiCorpusProcessor(
+        json_path=args.json_path,
+        embedding_path=args.embedding_path,
+        metadata_path=args.metadata_path,
+        vncorenlp_path=args.vncore_path,
+        batch_size=args.batch_size
+    )
+    processor.run()
+    
+if __name__ == "__main__":
+    main()

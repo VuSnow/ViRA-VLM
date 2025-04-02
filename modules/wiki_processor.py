@@ -32,6 +32,7 @@ class WikiCorpusProcessor():
         self.vncorenlp_path = vncorenlp_path
         self.is_loaded = is_loaded
         self.batch_size = batch_size
+        self.segment_empty = 0
         
         self.max_token = 128
         self.overlap_ratio = 0.3
@@ -80,9 +81,11 @@ class WikiCorpusProcessor():
             return " ".join(self.segmenter.word_segment(raw_text))
         except UnicodeDecodeError as e:
             print(f"UnicodeDecodeError at segment_text(): {e}")
+            self.segment_empty += 1
             return ""
         except Exception as e:
             print(f"General error in segment_text(): {e}")
+            self.segment_empty += 1
             return ""
     
     def chunk_text_by_token(self, text:str):
@@ -163,6 +166,8 @@ class WikiCorpusProcessor():
                     "chunk_id": idx,
                     "chunk_text": chunk
                 })
+                
+        print(f"Number of segment empty: {self.segment_empty}")
         print(f"Total chunks: {len(self.chunks)}")
         
         print("[3] Embedding chunks...")

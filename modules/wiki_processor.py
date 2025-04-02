@@ -66,7 +66,7 @@ class WikiCorpusProcessor():
             if not isinstance(data, list):
                 raise ValueError("File JSON không chứa danh sách bài viết (list of dicts).")
             
-            for article in tqdm(data[0:200], desc="Loading articles"):
+            for article in tqdm(data, desc="Loading articles"):
                 self.corpus.append(article)
             print(f"Loaded {len(self.corpus)} articles from {self.json_path}")
         except json.JSONDecodeError as e:
@@ -178,7 +178,7 @@ def main():
     parser.add_argument("--embedding_path", type=str, default="/workspace/Vi-VLM-TTDN/data/outputs/wiki_embeddings.pt", help="The path to save pt embeddings file")
     parser.add_argument("--metadata_path", type=str, default="/workspace/Vi-VLM-TTDN/data/outputs/wiki_metadata.pkl", help="The path to save metadata pickle file")
     parser.add_argument("--vncore_path", type=str, default="/workspace/Vi-VLM-TTDN/modules/vncorenlp", help="The path to save vncorenlp model")
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     args = parser.parse_args()
     
     processor = WikiCorpusProcessor(

@@ -7,12 +7,8 @@ import torch
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
-    
-try:
-    from py_vncorenlp import VnCoreNLP
-    import py_vncorenlp
-except ImportError:
-    VnCoreNLP = None
+from py_vncorenlp import VnCoreNLP
+import py_vncorenlp
 
 class WikiCorpusProcessor():
     def __init__(self,
@@ -43,12 +39,16 @@ class WikiCorpusProcessor():
         self.tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name)
         
         self.segmenter = None
+        
+        os.makedirs(self.vncorenlp_path, exist_ok=True)
         if not self.is_loaded:
             if VnCoreNLP is None:
                 raise ImportError("VnCoreNLP is not installed. Please intall it with `pip install py_vncorenlp`")
             if not os.path.isabs(self.vncorenlp_path):
                 raise FileNotFoundError(f"This is not absolute path of VnCoreNLP model. Please insert the absolute path of folder containing VnCoreNLP model.")
-            py_vncorenlp.download_model(save_dir=self.vncorenlp_path)
+            if not os.path.isfile(os.path.join(self.vncorenlp_path, "VnCoreNLP-1.2.jar")):
+                print("Downloading VnCoreNLP model...")
+                py_vncorenlp.download_model(save_dir=self.vncorenlp_path)
             self.segmenter = VnCoreNLP(save_dir=self.vncorenlp_path, annotators=["wseg"])
             self.is_loaded = True
             

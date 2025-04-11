@@ -10,6 +10,7 @@ import py_vncorenlp
 class SentenceEmbeddingRetrieval(nn.Module):
     def __init__(self,
                  model_name="dangvantuan/vietnamese-embedding",
+                 tokenizer_path="/workspace/Vi-VLM-TTDN/modules/vncorenlp",
                  device=None,
                  batch_size=32,
                  is_loaded=False

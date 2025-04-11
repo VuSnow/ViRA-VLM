@@ -50,7 +50,6 @@ class CrossAttention(nn.Module):
         text_proj = self.text_proj(
             text_embeds
         ).squeeze(1)
-
         image_proj = self.vision_proj(
             image_feats
         )              # [B, 256, 1792]

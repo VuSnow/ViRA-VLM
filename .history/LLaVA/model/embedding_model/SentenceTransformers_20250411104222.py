@@ -48,9 +48,6 @@ class SentenceEmbeddingRetrieval(nn.Module):
 
     @torch.no_grad()
     def forward(self, questions, tokenize_text=True):
-        if isinstance(questions, str):
-            questions = [questions]
-
         segmented_questions = [self.segment_text(
             question) for question in questions]
 

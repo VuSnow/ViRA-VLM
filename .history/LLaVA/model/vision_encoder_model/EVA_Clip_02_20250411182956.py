@@ -67,7 +67,6 @@ class EVA02VisionTower(nn.Module):
             model_name=self.vision_tower_name,
             pretrained=self.pretrained,
             out_indices=(self.select_layer,),
-            # features_only=True,
         )
         self.vision_tower = self.vision_tower.to(self._device)
         self.vision_tower.eval()
@@ -75,22 +74,16 @@ class EVA02VisionTower(nn.Module):
         self.is_loaded = True
 
     def preprocess_image(self, image):
-        return self.image_processor(image)
+        return self.image_processor(image.convert('RGB')).unsqueeze(0)
 
-    def select_features(self, patch_tokens):
+    def select_features(self, feature_forward):
         if self.select_feature == 'patch':
-            image_features = patch_tokens
+            image_features = feature_forward[:, 1:, :]
         elif self.select_feature == 'cls_patch':
-            if self.cls_token is None:
-                raise ValueError(
-                    "cls_token is not defined. Model might not be loaded.")
-            batch_size = patch_tokens.size(0)
-            cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-            image_features = torch.cat((cls_tokens, patch_tokens), dim=1)
+            image_features = feature_forward
         else:
             raise ValueError(
-                f"Unexpected select feature: {self.select_feature}")
-
+                f"Unknown select_feature: {self.select_feature}.")
         return image_features
 
     @torch.no_grad()
@@ -118,3 +111,9 @@ class EVA02VisionTower(nn.Module):
     @property
     def device(self):
         return self.vision_tower._device
+
+    @property
+    def embed_dims(self):
+        if not self.is_loaded:
+            self.load_model()
+        return self.patch_embed.proj.out_channels

@@ -28,6 +28,8 @@ class SentenceEmbeddingRetrieval(nn.Module):
         self.embedding_model = SentenceTransformer(self.model_name)
         self.embedding_model = self.embedding_model.to(self._device)
         self.embedding_model.requires_grad_(False)
+        self.embedding_dim = self.embedding_model.get_sentence_embedding_dimension()
+        self.max_seq_length = self.embedding_model.max_seq_length
 
         os.makedirs(self.tokenizer_path, exist_ok=True)
         if VnCoreNLP is None:
@@ -47,7 +49,7 @@ class SentenceEmbeddingRetrieval(nn.Module):
         return " ".join(self.segmenter.word_segment(raw_text))
 
     @torch.no_grad()
-    def forward(self, questions, tokenize_text=True):
+    def encode(self, questions, tokenize_text=True):
         if isinstance(questions, str):
             questions = [questions]
 
@@ -59,12 +61,5 @@ class SentenceEmbeddingRetrieval(nn.Module):
             convert_to_tensor=True,
             batch_size=self.batch_size
         )
+
         return embeddings
-
-    @property
-    def embed_dims(self):
-        return self.embedding_model.get_sentence_embedding_dimension()
-
-    @property
-    def max_seq_length(self):
-        return self.embedding_model.max_seq_length

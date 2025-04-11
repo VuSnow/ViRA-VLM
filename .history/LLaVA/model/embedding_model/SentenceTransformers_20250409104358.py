@@ -47,7 +47,7 @@ class SentenceEmbeddingRetrieval(nn.Module):
         return " ".join(self.segmenter.word_segment(raw_text))
 
     @torch.no_grad()
-    def forward(self, questions, tokenize_text=True):
+    def encode(self, questions, tokenize_text=True):
         if isinstance(questions, str):
             questions = [questions]
 

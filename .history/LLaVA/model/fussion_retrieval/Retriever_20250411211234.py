@@ -51,38 +51,38 @@ class Retriever(nn.Module):
         if self.index is None:
             self.index = self.build_index()
 
-    def load_embedding(self):
-        if torch.cuda.is_available():
-            tensor_file = os.path.join(
-                self.embedding_path, 'wiki_embeddings.pt')
-            if os.path.isfile(tensor_file):
-                embeddings = torch.load(tensor_file, map_location='cuda')
-                self.use_gpu = True
-            else:
-                raise FileNotFoundError(
-                    f"Embedding file {tensor_file} not found.")
-        else:
-            numpy_file = os.path.join(
-                self.embedding_path, 'wiki_embeddings.npy')
-            if os.path.isfile(numpy_file):
-                embeddings = np.load(numpy_file).astype(np.float32)
-            else:
-                raise FileNotFoundError(
-                    f"Embedding file {numpy_file} not found.")
+    # def load_embedding(self):
+    #     if torch.cuda.is_available():
+    #         tensor_file = os.path.join(
+    #             self.embedding_path, 'wiki_embeddings.pt')
+    #         if os.path.isfile(tensor_file):
+    #             embeddings = torch.load(tensor_file, map_location='cuda')
+    #             self.use_gpu = True
+    #         else:
+    #             raise FileNotFoundError(
+    #                 f"Embedding file {tensor_file} not found.")
+    #     else:
+    #         numpy_file = os.path.join(
+    #             self.embedding_path, 'wiki_embeddings.npy')
+    #         if os.path.isfile(numpy_file):
+    #             embeddings = np.load(numpy_file).astype(np.float32)
+    #         else:
+    #             raise FileNotFoundError(
+    #                 f"Embedding file {numpy_file} not found.")
 
-        self.embedding_dim = embeddings.shape[1]
-        return embeddings
+    #     self.embedding_dim = embeddings.shape[1]
+    #     return embeddings
 
-    def build_index(self):
-        index = faiss.IndexFlatL2(self.embedding_dim)
-        if self.use_gpu:
-            ngpus = faiss.get_num_gpus()
-            print(f"Using {ngpus} GPUs")
-            index = faiss.index_cpu_to_all_gpus(index)
-            index.add(self.embeddings.contiguous())
-        else:
-            index.add(self.embeddings)
-        return index
+    # def build_index(self):
+    #     index = faiss.IndexFlatL2(self.embedding_dim)
+    #     if self.use_gpu:
+    #         ngpus = faiss.get_num_gpus()
+    #         print(f"Using {ngpus} GPUs")
+    #         index = faiss.index_cpu_to_all_gpus(index)
+    #         index.add(self.embeddings.contiguous())
+    #     else:
+    #         index.add(self.embeddings)
+    #     return index
 
     # def forward(self, segmented_texts, image_feats):
     #     """

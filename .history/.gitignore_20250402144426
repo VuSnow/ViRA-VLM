@@ -1,5 +1,5 @@
 **/*.json
-data/
+data/wiki_corpus/
 modules/vncorenlp/*
 *.ipynb
 outputs

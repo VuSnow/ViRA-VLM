@@ -25,7 +25,8 @@ class SentenceEmbeddingRetrieval(nn.Module):
             print(f'{self.model_name} is already loaded, skipping.')
             return
 
-        self.embedding_model = SentenceTransformer(self.model_name)
+        self.embedding_model = SentenceTransformer(
+            self.model_name).to(self._device)
         self.embedding_model = self.embedding_model.to(self._device)
         self.embedding_model.requires_grad_(False)
 
@@ -47,7 +48,7 @@ class SentenceEmbeddingRetrieval(nn.Module):
         return " ".join(self.segmenter.word_segment(raw_text))
 
     @torch.no_grad()
-    def forward(self, questions, tokenize_text=True):
+    def encode(self, questions, tokenize_text=True):
         if isinstance(questions, str):
             questions = [questions]
 
@@ -59,7 +60,8 @@ class SentenceEmbeddingRetrieval(nn.Module):
             convert_to_tensor=True,
             batch_size=self.batch_size
         )
-        return embeddings
+
+        return
 
     @property
     def embed_dims(self):

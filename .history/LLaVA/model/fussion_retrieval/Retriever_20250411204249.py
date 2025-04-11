@@ -19,37 +19,16 @@ class Retriever(nn.Module):
                  top_k=5
                  ):
         super(Retriever, self).__init__()
-        # init vision model
         self.vision_model = vision_encoder if vision_encoder else EVA02VisionTower()
-        self.vision_dim = self.vision_model.embed_dims
-
-        # init text model
         self.text_encoder = text_encoder if text_encoder else SentenceEmbeddingRetrieval()
-        self.text_dim = self.text_encoder.embed_dims
+        self.cross_attention = cross_attention if cross_attention else CrossAttention()
         self.hidden_dim = hidden_dim
-
-        # init cross attention layer
-        if cross_attention is None:
-            cross_attention = CrossAttention(
-                vision_dim=self.vision_dim,
-                text_dim=self.text_dim,
-                hidden_dim=self.hidden_dim
-            )
-        else:
-            cross_attention.vision_dim = self.vision_dim
-            cross_attention.text_dim = self.text_dim
-            cross_attention.hidden_dim = hidden_dim
-
         self.embedding_path = embedding_path
         self.metadata_path = metadata_path
         self.top_k = top_k
         self.use_gpu = False
+        self.is_loaded = False
         self.index = None
-        self.embeddings = None
-        if self.embeddings is None:
-            self.embeddings = self.load_embedding()
-        if self.index is None:
-            self.index = self.build_index()
 
     def load_embedding(self):
         if torch.cuda.is_available():
@@ -69,29 +48,8 @@ class Retriever(nn.Module):
             else:
                 raise FileNotFoundError(
                     f"Embedding file {numpy_file} not found.")
-
-        self.embedding_dim = embeddings.shape[1]
+        self.is_loaded = True
         return embeddings
 
     def build_index(self):
-        index = faiss.IndexFlatL2(self.embedding_dim)
-        if self.use_gpu:
-            ngpus = faiss.get_num_gpus()
-            print(f"Using {ngpus} GPUs")
-            index = faiss.index_cpu_to_all_gpus(index)
-            index.add(self.embeddings.contiguous())
-        else:
-            index.add(self.embeddings)
-        return index
-
-    # def forward(self, segmented_texts, image_feats):
-    #     """
-    #     Forward pass for the Retriever module.
-
-    #     Args:
-    #         segmented_texts (list[str]): List of segmented texts.
-    #         image_feats (torch.Tensor): Image features of shape (batch_size, num_patches, vision_dim).
-
-    #     Returns:
-    #         torch.Tensor: Output of the cross-attention layer.
-    #     """
+        if not self.

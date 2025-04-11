@@ -46,14 +46,10 @@ class CrossAttention(nn.Module):
             torch.Tensor: Output of the cross-attention layer.
         """
         # Project text and image features to the same dimension
-        # # transform [B, 768] -> [B, T, 768]
-        text_proj = self.text_proj(
-            text_embeds
-        ).squeeze(1)
-
+        text_proj = self.text_proj(text_embeds).squeeze(
+            1)      # transform [B, 768] -> [B, T, 768]
         image_proj = self.vision_proj(
-            image_feats
-        )              # [B, 256, 1792]
+            image_feats)              # [B, 256, 1792]
 
         # Cross-attention
         attn_output, _ = self.attention(

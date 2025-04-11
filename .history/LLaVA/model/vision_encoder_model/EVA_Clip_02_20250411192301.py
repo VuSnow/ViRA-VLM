@@ -44,19 +44,19 @@ class EVA02VisionTower(nn.Module):
         if not delay_load or self.unfreeze_vision_tower:
             self.load_model()
 
-        # self.blocks = None
-        # self.patch_embed = None
-        # self.norm = None
-        # self.pos_embed = None
-        # self.cls_token = None
-        # self.pos_drop = None
-        # if self.is_loaded:
-        #     self.blocks = self.vision_tower.blocks
-        #     self.patch_embed = self.vision_tower.patch_embed
-        #     self.norm = self.vision_tower.norm
-        #     self.pos_embed = self.vision_tower.pos_embed
-        #     self.cls_token = self.vision_tower.cls_token
-        #     self.pos_drop = self.vision_tower.pos_drop
+        self.blocks = None
+        self.patch_embed = None
+        self.norm = None
+        self.pos_embed = None
+        self.cls_token = None
+        self.pos_drop = None
+        if self.is_loaded:
+            self.blocks = self.vision_tower.blocks
+            self.patch_embed = self.vision_tower.patch_embed
+            self.norm = self.vision_tower.norm
+            self.pos_embed = self.vision_tower.pos_embed
+            self.cls_token = self.vision_tower.cls_token
+            self.pos_drop = self.vision_tower.pos_drop
 
     def load_model(self, device_map=None):
         if self.is_loaded:

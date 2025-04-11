@@ -10,6 +10,7 @@ import py_vncorenlp
 class SentenceEmbeddingRetrieval(nn.Module):
     def __init__(self,
                  model_name="dangvantuan/vietnamese-embedding",
+                 tokenizer_path="/workspace/Vi-VLM-TTDN/modules/vncorenlp",
                  device=None,
                  batch_size=32,
                  is_loaded=False
@@ -34,17 +35,23 @@ class SentenceEmbeddingRetrieval(nn.Module):
         self.embedding_model.requires_grad_(False)
         self.is_loaded = True
 
-    @torch.no_grad()
-    def forward(self, segmented_texts: list[str], tokenize_text=True):
-        if isinstance(segmented_texts, str):
-            segmented_texts = [segmented_texts]
+    def segment_text(self, raw_text: str):
+        return " ".join(self.segmenter.word_segment(raw_text))
 
-        return self.embedding_model.encode(
-            segmented_texts,
+    @torch.no_grad()
+    def forward(self, questions, tokenize_text=True):
+        if isinstance(questions, str):
+            questions = [questions]
+
+        segmented_questions = [self.segment_text(
+            question) for question in questions]
+
+        embeddings = self.embedding_model.encode(
+            segmented_questions,
             convert_to_tensor=True,
-            batch_size=self.batch_size,
-            device=self._device
+            batch_size=self.batch_size
         )
+        return embeddings
 
     @property
     def embed_dims(self):

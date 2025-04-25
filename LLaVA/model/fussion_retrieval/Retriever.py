@@ -84,14 +84,14 @@ class Retriever(nn.Module):
             index.add(self.embeddings)
         return index
 
-    # def forward(self, segmented_texts, image_feats):
-    #     """
-    #     Forward pass for the Retriever module.
+    def forward(self, segmented_texts, image_feats):
+        """
+        Forward pass for the Retriever module.
 
-    #     Args:
-    #         segmented_texts (list[str]): List of segmented texts.
-    #         image_feats (torch.Tensor): Image features of shape (batch_size, num_patches, vision_dim).
+        Args:
+            segmented_texts (list[str]): List of segmented texts.
+            image_feats (torch.Tensor): Image features of shape (batch_size, num_patches, vision_dim).
 
-    #     Returns:
-    #         torch.Tensor: Output of the cross-attention layer.
-    #     """
+        Returns:
+            torch.Tensor: Output of the cross-attention layer.
+        """

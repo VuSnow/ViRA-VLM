@@ -3,3 +3,4 @@ data/
 modules/vncorenlp/*
 *.ipynb
 outputs
+.history

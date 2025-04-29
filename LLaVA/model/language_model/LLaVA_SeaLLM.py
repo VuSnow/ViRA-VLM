@@ -29,6 +29,9 @@ class LLaVA_seaLLMs(nn.Module):
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map="auto", torch_dtype=torch.float16
         )
+        self.model.eval()
+        self.model.requires_grad_(False)
+        self.model.to(self._device)
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = "left"
@@ -39,12 +42,11 @@ class LLaVA_seaLLMs(nn.Module):
         self.max_seq_length = self.model.config.max_position_embeddings
         self.vocab_size = self.model.config.vocab_size
         self.is_loaded = True
-        self.model.eval()
-        self.model.requires_grad_(False)
-        self.model.to(self._device)
 
-    def encode(self, text, return_tensors="pt"):
-        """Tokenize the text and prepare it for the model."""
+    def tokenize(self, text, return_tensors="pt"):
+        """
+        Tokenize the text and prepare it for the model
+        """
         if isinstance(text, str):
             text = [text]
         return self.tokenizer(
@@ -74,7 +76,7 @@ class LLaVA_seaLLMs(nn.Module):
 
     def forward(self, text):
         """The forward method to pass the text and get the embeddings."""
-        encoding = self.encode(text)
+        encoding = self.tokenize(text)
         input_ids = encoding['input_ids'].to(self._device)
         attention_mask = encoding['attention_mask'].to(self._device)
 

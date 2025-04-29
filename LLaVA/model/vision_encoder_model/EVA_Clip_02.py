@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from timm import create_model
 from torchvision import transforms
-import requests
 
 
 class EVA02VisionTower(nn.Module):
@@ -44,20 +43,6 @@ class EVA02VisionTower(nn.Module):
         if not delay_load or self.unfreeze_vision_tower:
             self.load_model()
 
-        # self.blocks = None
-        # self.patch_embed = None
-        # self.norm = None
-        # self.pos_embed = None
-        # self.cls_token = None
-        # self.pos_drop = None
-        # if self.is_loaded:
-        #     self.blocks = self.vision_tower.blocks
-        #     self.patch_embed = self.vision_tower.patch_embed
-        #     self.norm = self.vision_tower.norm
-        #     self.pos_embed = self.vision_tower.pos_embed
-        #     self.cls_token = self.vision_tower.cls_token
-        #     self.pos_drop = self.vision_tower.pos_drop
-
     def load_model(self, device_map=None):
         if self.is_loaded:
             print(f'{self.vision_tower_name} is already loaded, skipping.')
@@ -73,8 +58,16 @@ class EVA02VisionTower(nn.Module):
         self.vision_tower.requires_grad_(False)
         self.is_loaded = True
 
-    def preprocess_image(self, image):
-        return self.image_processor(image.convert('RGB')).unsqueeze(0)
+    # def preprocess_image(self, images):
+    #     # Nếu ảnh đầu vào là list, chuyển thành tensor
+    #     if isinstance(images, list):
+    #         images = torch.stack([self.image_processor(
+    #             image.convert('RGB')) for image in images])
+    #     else:
+    #         # Nếu ảnh đã là tensor thì tiến hành preprocessing cho toàn bộ batch
+    #         images = self.image_processor(images)  # [B, C, H, W]
+
+    #     return images.to(self._device)
 
     def select_features(self, feature_forward):  # [B, 257, 1792]
         if self.select_feature == 'patch':
@@ -116,3 +109,7 @@ class EVA02VisionTower(nn.Module):
         if not self.is_loaded:
             self.load_model()
         return self.vision_tower.num_features
+
+    @property
+    def transform(self):
+        return self.image_processor

@@ -6,11 +6,19 @@ from PIL import Image
 from tqdm import tqdm
 from peft import get_peft_model, LoraConfig, TaskType
 from huggingface_hub import login
-from model.vision_encoder_model.EVA_Clip_02 import EVA02VisionTower
-from model.language_model.LLaVA_SeaLLM import LLaVA_seaLLMs
-from fussion_modules.Cross_Attention import CrossAttention
-from stage_1.Captioning import CaptionGenerating
-from stage_1.Dataloader import ImageCaptionDataset
+from LLaVA.model.vision_encoder_model.EVA_Clip_02 import EVA02VisionTower
+from LLaVA.model.language_model.LLaVA_SeaLLM import LLaVA_seaLLMs
+from LLaVA.fussion_modules.Cross_Attention import CrossAttention
+from LLaVA.stage_1.Captioning import CaptionGenerating
+from LLaVA.stage_1.Dataloader import ImageCaptionDataset
+import sys
+import os
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Thêm thư mục gốc project vào sys.path
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.append(ROOT_DIR)
 
 
 def train(model, dataloader, optimizer, device, epochs=100):
@@ -64,11 +72,17 @@ def main():
     model = CaptionGenerating(vision_encoder, cross_attention, llm).to(device)
 
     login()
-    dataset = load_dataset("5CD-AI/Viet-LAION-Gemini-VQA", split="train[:100]")
-    images = [item['image'] for item in dataset]
-    descriptions = [item['description'] for item in dataset]
-    custom_dataset = ImageCaptionDataset(images, descriptions, vision_encoder)
+    dataset = load_dataset("5CD-AI/Viet-LAION-Gemini-VQA", streaming=True)
+    first_100 = [x for _, x in zip(range(100), dataset["train"])]
+    images = [item['image'] for item in first_100]
+    descriptions = [item['description'] for item in first_100]
+
+    custom_dataset = ImageCaptionDataset(
+        images, descriptions, vision_encoder.transform)
     dataloader = DataLoader(custom_dataset, batch_size=16, shuffle=True)
     optimizer = AdamW(model.parameters(), lr=1e-5)
 
     train(model, dataloader, optimizer, device, epochs=10)
+
+
+main()

@@ -53,4 +53,5 @@ The above command:
     - `wiki_embeddings.npy`: chunk embeddings [float32]
     - `wiki_metadata.pkl`: metadata for each chunk (`title`, `doc_id`, `chunk_id`, `chunk_text`)
 
-
+## 5. Run the train.py
+python -m LLaVA.stage_1.train

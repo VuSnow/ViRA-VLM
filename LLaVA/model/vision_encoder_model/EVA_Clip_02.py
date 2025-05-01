@@ -16,7 +16,8 @@ class EVA02VisionTower(nn.Module):
         std=(0.26862954, 0.26130258, 0.27577711),
         delay_load=False,
         unfreeze_vision_tower=False,
-        device=None
+        device=None,
+        use_data_parallel=False,
     ):
         super().__init__()
         self.is_loaded = False
@@ -28,6 +29,11 @@ class EVA02VisionTower(nn.Module):
         self.std = std
         self.pretrained = pretrained
         self.unfreeze_vision_tower = unfreeze_vision_tower
+        self.use_data_parallel = use_data_parallel
+        # Decide device
+        self._device = device or (
+            'cuda' if torch.cuda.is_available() else 'cpu')
+
         self.image_processor = transforms.Compose([
             transforms.Resize(
                 self.image_size, interpolation=transforms.InterpolationMode.BICUBIC),
@@ -35,27 +41,29 @@ class EVA02VisionTower(nn.Module):
             transforms.ToTensor(),
             transforms.Normalize(mean=self.mean, std=self.std)
         ])
-        if device is not None:
-            self._device = device
-        else:
-            self._device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         if not delay_load or self.unfreeze_vision_tower:
             self.load_model()
 
-    def load_model(self, device_map=None):
+    def load_model(self):
         if self.is_loaded:
             print(f'{self.vision_tower_name} is already loaded, skipping.')
             return
 
-        self.vision_tower = create_model(
+        model = create_model(
             model_name=self.vision_tower_name,
             pretrained=self.pretrained,
             out_indices=(self.select_layer,),
         )
-        self.vision_tower = self.vision_tower.to(self._device)
-        self.vision_tower.eval()
-        self.vision_tower.requires_grad_(False)
+        if self.use_data_parallel and torch.cuda.device_count() > 1:
+            print(f"Using DataParallel on {torch.cuda.device_count()} GPUs.")
+            model = nn.DataParallel(model)
+
+        model = model.to(self._device)
+        model.eval()
+        model.requires_grad_(self.unfreeze_vision_tower)
+
+        self.vision_tower = model
         self.is_loaded = True
 
     # def preprocess_image(self, images):
@@ -80,7 +88,7 @@ class EVA02VisionTower(nn.Module):
                 f"Unknown select_feature: {self.select_feature}.")
         return image_features
 
-    @torch.no_grad()
+    # @torch.no_grad()
     def forward(self, images):
         if not self.is_loaded:
             raise RuntimeError(
@@ -90,11 +98,11 @@ class EVA02VisionTower(nn.Module):
             raise TypeError(
                 "Expected input to be a Tensor of shape [B, 3, H, W]")
 
-        images = images.to(self._device)
+        model_device = next(self.vision_tower.parameters()).device
+        images = images.to(device=model_device, dtype=self.dtype)
 
-        x = self.vision_tower.forward_features(images)  # [B, 257, 1792]
-        x = self.select_features(x)
-        return x
+        features = self.vision_tower.forward_features(images)  # [B, 257, 1792]
+        return self.select_features(features)
 
     @property
     def dtype(self):
@@ -102,7 +110,7 @@ class EVA02VisionTower(nn.Module):
 
     @property
     def device(self):
-        return self.vision_tower._device
+        return next(self.vision_tower.parameters()).device
 
     @property
     def embed_dims(self):

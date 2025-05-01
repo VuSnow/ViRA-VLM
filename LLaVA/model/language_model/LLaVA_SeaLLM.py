@@ -6,32 +6,50 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 class LLaVA_seaLLMs(nn.Module):
     def __init__(
         self,
-        model_name="SeaLLM/SeaLLM-7B",
-        device=None,
+        model_name="SeaLLMs/SeaLLMs-v3-7B",
+        device_map="auto",
         delay_load=False,
         is_loaded=False,
+        requires_grad=False
     ):
         super(LLaVA_seaLLMs, self).__init__()
         self.is_loaded = is_loaded
         self.model_name = model_name
         self.delay_load = delay_load
-        self._device = device if device else (
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        self.requires_grad = requires_grad
+        self.device_map = self._decide_device_map(device_map)
 
         self.model = None
         self.tokenizer = None
         if not self.delay_load:
             self.load_model()
 
+    def _decide_device_map(self, device_map):
+        """Decide device map based on available hardware"""
+        if device_map is not None:
+            return device_map  # user override
+
+        if torch.cuda.is_available():
+            gpu_count = torch.cuda.device_count()
+            if gpu_count >= 2:
+                return "balanced"
+            else:
+                return "auto"
+        else:
+            return "cpu"
+
     def load_model(self):
         """Load the model and tokenizer."""
         self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map="auto", torch_dtype=torch.float16
+            self.model_name,
+            device_map=self.device_map,
+            torch_dtype=torch.float16,
+            output_hidden_states=True
         )
         self.model.eval()
-        self.model.requires_grad_(False)
-        self.model.to(self._device)
+        self.model.requires_grad_(self.requires_grad)
+        # self.model.to(self._device)
+
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.tokenizer.padding_side = "left"
@@ -49,15 +67,19 @@ class LLaVA_seaLLMs(nn.Module):
         """
         if isinstance(text, str):
             text = [text]
-        return self.tokenizer(
+
+        tokens = self.tokenizer(
             text,
             return_tensors=return_tensors,
             padding=True,
             truncation=True,
             max_length=self.max_seq_length,
         )
+        device = next(self.model.parameters()).device
 
-    def embeddings(self, input_ids, attention_mask=None):
+        return {k: v.to(device) for k, v in tokens.items()}
+
+    def embeddings(self, input_ids):
         """
         Forward pass for obtaining the embeddings of text.
 
@@ -68,19 +90,13 @@ class LLaVA_seaLLMs(nn.Module):
         Returns:
             torch.Tensor: The embeddings of the text.
         """
-        outputs = self.model(
-            input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True
-        )
+        outputs = self.model(**input_ids)
+
         # Return the embeddings of the last hidden state
-        return outputs.last_hidden_state
+        return outputs.hidden_states[-1]
 
     def forward(self, text):
         """The forward method to pass the text and get the embeddings."""
-        encoding = self.tokenize(text)
-        input_ids = encoding['input_ids'].to(self._device)
-        attention_mask = encoding['attention_mask'].to(self._device)
-
-        # Get text embeddings (using the last hidden state from the transformer model)
-        text_embeddings = self.embeddings(input_ids, attention_mask)
-
+        inputs = self.tokenize(text)
+        text_embeddings = self.embeddings(inputs)
         return text_embeddings

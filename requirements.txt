@@ -1,8 +1,11 @@
-python=3.10
+python=3.12.10
 sentence_transformers
 transformers 
 tqdm
 pyvi
 py_vncorenlp
 torch
-
+accelerate
+datasets
+peft
+timm

@@ -3,7 +3,7 @@ from torch import nn
 
 
 class CrossAttention(nn.Module):
-    def __init__(self, query_dim=1792, key_dim=768, hidden_dim=768, num_heads=8, ffn_multiplier=4, dropout=0.1):
+    def __init__(self, query_dim=768, key_dim=1792, hidden_dim=768, num_heads=8, ffn_multiplier=4, dropout=0.1):
         super(CrossAttention, self).__init__()
         self.query_dim = query_dim
         self.key_dim = key_dim
@@ -60,3 +60,9 @@ class CrossAttention(nn.Module):
         output = self.layer_norm2(ffn_output + attn_output)
 
         return output
+
+    def get_tokenizer(self):
+        return self.tokenizer
+
+    def get_input_embedding_layer(self):
+        return self.model.get_input_embeddings()

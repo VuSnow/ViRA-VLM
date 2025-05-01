@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-from model.vision_encoder_model.EVA_Clip_02 import EVA02VisionTower
-from model.language_model.LLaVA_SeaLLM import LLaVA_seaLLMs
-from fussion_modules.Cross_Attention import CrossAttention
+from LLaVA.model.vision_encoder_model.EVA_Clip_02 import EVA02VisionTower
+from LLaVA.model.language_model.LLaVA_SeaLLM import LLaVA_seaLLMs
+from LLaVA.fussion_modules.Cross_Attention import CrossAttention
 
 
 class CaptionGenerating(nn.Module):
@@ -30,6 +30,8 @@ class CaptionGenerating(nn.Module):
         with torch.no_grad():
             question_embeds = self.llm.embeddings(
                 question_inputs)  # [B, T_q, D]
+        question_embeds = question_embeds.to(
+            dtype=next(self.llm.model.parameters()).dtype)
 
         # 3. Fuse with image
         fused = self.cross_attention(
@@ -44,25 +46,31 @@ class CaptionGenerating(nn.Module):
             max_length=self.llm.max_seq_length
         ).to(fused.device)
 
-        target_ids = caption_inputs["input_ids"]  # [B, T_d]
+        target_ids = caption_inputs["input_ids"].to(
+            dtype=torch.long, device=fused.device)
+
+        # input: fused + caption[:, :-1]
+        caption_input_ids = target_ids[:, :-1]
         caption_embeds = self.llm.model.get_input_embeddings()(
-            target_ids[:, :-1])  # [B, T_d-1, D]
+            caption_input_ids
+        ).to(dtype=next(self.llm.model.parameters()).dtype)
 
-        # 5. Prepare input embeddings
-        inputs_embeds = torch.cat(
-            [fused, caption_embeds], dim=1)  # [B, T_q + T_d -1, D]
+        inputs_embeds = torch.cat([fused, caption_embeds], dim=1)
 
-        # 6. Construct attention_mask
+        # label: -100 for prefix + caption[:, 1:]
+        caption_target_ids = target_ids[:, 1:]
+        labels = torch.cat([
+            torch.full((target_ids.size(0), fused.size(1)), -100,
+                       dtype=torch.long, device=fused.device),
+            caption_target_ids
+        ], dim=1)  # ignore prefix in loss
+
+        # attention_mask
         fused_mask = torch.ones((fused.size(0), fused.size(
             1)), dtype=torch.long, device=fused.device)
-        caption_mask = caption_inputs["attention_mask"][:, 1:]  # [B, T_d-1]
-        attention_mask = torch.cat(
-            [fused_mask, caption_mask], dim=1)  # [B, T_q + T_d - 1]
-
-        # 7. Mask prefix in loss
-        labels = target_ids.clone()
-        prefix_len = fused.size(1)
-        labels[:, :prefix_len] = -100  # ignore prefix in loss
+        caption_mask = caption_inputs["attention_mask"][:, 1:]
+        attention_mask = torch.cat([fused_mask, caption_mask], dim=1)
+        attention_mask = attention_mask.to(dtype=inputs_embeds.dtype)
 
         # 8. Forward pass through LLM
         outputs = self.llm.model(
@@ -81,7 +89,10 @@ class CaptionGenerating(nn.Module):
             image_features = model.vision_encoder(image_tensor)
             question_inputs = model.llm.tokenize(prompt)
             question_embeds = model.llm.embeddings(question_inputs)
+            question_embeds = question_embeds.to(dtype=image_features.dtype)
             fused = model.cross_attention(question_embeds, image_features)
+            # Bắt buộc thêm dòng này
+            fused = fused.to(dtype=next(model.llm.model.parameters()).dtype)
 
             output_ids = model.llm.model.generate(
                 inputs_embeds=fused,

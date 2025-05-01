@@ -99,7 +99,8 @@ class EVA02VisionTower(nn.Module):
                 "Expected input to be a Tensor of shape [B, 3, H, W]")
 
         model_device = next(self.vision_tower.parameters()).device
-        images = images.to(device=model_device, dtype=self.dtype)
+        images = images.to(device=model_device, dtype=next(
+            self.vision_tower.parameters()).dtype)
 
         features = self.vision_tower.forward_features(images)  # [B, 257, 1792]
         return self.select_features(features)

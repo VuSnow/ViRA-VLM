@@ -4,3 +4,9 @@ modules/vncorenlp/*
 *.ipynb
 outputs
 .history
+LLaVA/stage_1/Captioning_fix_2.py
+LLaVA/stage_1/Captioning_fix.py
+LLaVA/stage_1/train_fix.py
+LLaVA/stage_1/train_fix_2.py
+LLaVA/model/vision_encoder_model/EVA_Clip_02_fix.py
+LLaVA/model/language_model/LLaVA_seaLLMs_fix.py

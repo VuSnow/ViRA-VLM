@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
 import logging
+from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 logger = logging.getLogger(__name__)
 
 
 class CaptionGenerating(nn.Module):
     def __init__(self, vision_encoder, cross_attention, llm):
-        super().__init__()
+        super(CaptionGenerating, self).__init__()
         self.vision_encoder = vision_encoder
         self.cross_attention = cross_attention
         self.llm = llm
@@ -14,8 +15,9 @@ class CaptionGenerating(nn.Module):
 
     def forward(self, image_tensor, questions, descriptions):
         target_dtype = self.llm.dtype
-        image_features = self.vision_encoder(image_tensor.to(
-            device=self._device, dtype=target_dtype))  # [B, 256, 1792]
+        image_tensor = image_tensor.to(device=self._device, dtype=target_dtype)
+
+        image_features = self.vision_encoder(image_tensor)  # [B, 256, 1792]
 
         if not torch.isfinite(image_features).all():
             logger.error(
@@ -24,8 +26,6 @@ class CaptionGenerating(nn.Module):
         image_features = image_features.to(dtype=target_dtype)
 
         question_inputs = self.llm.tokenize(questions)
-        question_inputs = {k: v.to(image_tensor.device)
-                           for k, v in question_inputs.items()}
         with torch.no_grad():
             question_embeds = self.llm.embeddings(
                 question_inputs)  # [B, T_q, D]
@@ -64,6 +64,8 @@ class CaptionGenerating(nn.Module):
             return torch.tensor(0.0, device=image_tensor.device, requires_grad=True)
 
         caption_input_ids = target_ids[:, :-1]
+        caption_target_ids = target_ids[:, 1:]
+
         caption_embeds = self.llm.model.get_input_embeddings()(caption_input_ids)
         caption_embeds = caption_embeds.to(dtype=target_dtype)
 
@@ -77,7 +79,6 @@ class CaptionGenerating(nn.Module):
                 "[WARNING] inputs_embeds has NaN or Inf after concatenation")
             return torch.tensor(0.0, device=inputs_embeds.device, requires_grad=True)
 
-        caption_target_ids = target_ids[:, 1:]
         labels = torch.cat([
             torch.full((target_ids.size(0), fused.size(1)), -100,
                        dtype=torch.long, device=self._device),
@@ -97,7 +98,10 @@ class CaptionGenerating(nn.Module):
             labels=labels,
             return_dict=True,
         )
+
         loss = outputs.loss
+        logits = outputs.logits
+
         if loss is None:
             logger.error(
                 "[ERROR] Loss calculation failed, model output did not contain loss.")
@@ -108,7 +112,13 @@ class CaptionGenerating(nn.Module):
                 f"[ERROR] Calculated loss is NaN or Inf: {loss.item()}")
             return torch.tensor(0.0, device=self._device, requires_grad=True)
 
-        return loss
+        return CausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions
+        )
 
     def generate_caption(self, image_tensor, prompt="Miêu tả chi tiết bức ảnh này từ hành động, vật thể cho đến cảm giác hoặc bối cảnh. Bao gồm mọi yếu tố như màu sắc, ánh sáng, bố cục, các đối tượng và sự tương tác giữa chúng, cảm xúc hoặc thông điệp mà bức ảnh truyền tải. Hãy chú ý đến cả các yếu tố nhỏ mà có thể mang lại chiều sâu cho bức ảnh."):
         self.eval()  # Set model to evaluation mode
@@ -147,7 +157,7 @@ class CaptionGenerating(nn.Module):
 
             model_generate_kwargs = {
                 "inputs_embeds": fused,
-                "max_new_tokens": 256,
+                "max_new_tokens": 512,
                 "eos_token_id": self.llm.tokenizer.eos_token_id,
                 "pad_token_id": self.llm.tokenizer.pad_token_id  # Also set pad token id
             }

@@ -27,7 +27,7 @@ class LLaVA_seaLLMs(nn.Module):
         except RuntimeError:
             self.compute_dtype = torch.float32
             logger.warning(
-                "bfloat16 not supported, falling back to float16. This might be less stable.")
+                "bfloat16 not supported, falling back to float32. This might be less stable.")
 
         self.model = None
         self.tokenizer = None
@@ -58,6 +58,9 @@ class LLaVA_seaLLMs(nn.Module):
             logger.info(f"Model {self.model_name} already loaded. Skipping.")
             return
 
+        logger.info(
+            f"Loading LLM model: {self.model_name} with dtype: {self.compute_dtype}")
+
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device_map,
@@ -68,6 +71,7 @@ class LLaVA_seaLLMs(nn.Module):
         self.model.requires_grad_(self.requires_grad)
         # self.model.to(self._device)
 
+        logger.info(f"Loading tokenizer: {self.model_name}")
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         if self.tokenizer.pad_token_id is None or self.tokenizer.pad_token_id != self.tokenizer.eos_token_id:
@@ -82,6 +86,9 @@ class LLaVA_seaLLMs(nn.Module):
         """
         Tokenize the text and prepare it for the model
         """
+        if not self.is_loaded:
+            self.load_model()
+
         if isinstance(text, str):
             text = [text]
 
@@ -94,7 +101,13 @@ class LLaVA_seaLLMs(nn.Module):
         )
         device = next(self.model.parameters()).device
 
-        return {k: v.to(device) for k, v in tokens.items()}
+        try:
+            device = self.model.get_input_embeddings().weight.device
+            return {k: v.to(device) for k, v in tokens.items()}
+        except Exception as e:
+            logger.warning(
+                f"Could not determine model device for token moving: {e}. Tokens remain on default device.")
+            return tokens
 
     def embeddings(self, input_ids):
         """
@@ -107,6 +120,19 @@ class LLaVA_seaLLMs(nn.Module):
         Returns:
             torch.Tensor: The embeddings of the text.
         """
+        if not self.is_loaded:
+            self.load_model()
+        if not isinstance(input_ids, dict) or 'input_ids' not in input_ids:
+            raise ValueError(
+                "Input to embeddings must be a dictionary from the tokenizer containing 'input_ids'.")
+
+        # Ensure inputs are on the correct device
+        try:
+            device = self.model.get_input_embeddings().weight.device
+            input_ids = {k: v.to(device) for k, v in input_ids.items()}
+        except Exception as e:
+            logger.warning(f"Could not move input_ids to model device: {e}")
+
         outputs = self.model(**input_ids)
 
         # Return the embeddings of the last hidden state
@@ -114,6 +140,8 @@ class LLaVA_seaLLMs(nn.Module):
 
     def forward(self, text):
         """The forward method to pass the text and get the embeddings."""
+        if not self.is_loaded:
+            self.load_model()
         inputs = self.tokenize(text)
         text_embeddings = self.embeddings(inputs)
         return text_embeddings

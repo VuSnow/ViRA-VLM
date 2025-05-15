@@ -10,6 +10,7 @@ from LLaVA.model.language_model.LLaVA_SeaLLM import LLaVA_seaLLMs
 from LLaVA.fussion_modules.Cross_Attention import CrossAttention
 from LLaVA.stage_1.Captioning import CaptionGenerating
 from LLaVA.stage_1.Dataloader import ImageCaptionDataset
+from LLaVA.model.metrics import calculate_token_accuracy, calculate_bleu_scores, calculate_rouge_scores
 import sys
 import os
 import logging
@@ -22,27 +23,27 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 sys.path.append(ROOT_DIR)
 
 
-def calculate_accuracy(predictions, labels):
-    _, predicted = torch.max(predictions, 1)  # Lấy chỉ số có giá trị cao nhất
-    correct = (predicted == labels).sum().item()
-    accuracy = correct / labels.size(0)
-    return accuracy
-
-
 def train(model, dataloader, optimizer, device, epochs=100, accumulation_steps=2, save_dir='./saved_models'):
+    scaler = torch.amp.GradScaler(
+        enabled=(model.llm.dtype != torch.float32))
     model.train()
-    scaler = torch.cuda.amp.GradScaler(
-        enabled=(model.llm.dtype == torch.float32))
 
     for epoch in range(epochs):
         total_loss = 0
         processed_batches = 0
+
+        batch_accuracies = []
+        epoch_references = []
+        epoch_hypotheses = []
+
         optimizer.zero_grad()
         pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1}/{epochs}")
         for i, (image_tensor, prompt_texts, description_texts) in enumerate(pbar):
-            with torch.cuda.amp.autocast(enabled=(model.llm.dtype != torch.float32), dtype=model.llm.dtype):
-                loss = model(image_tensor, prompt_texts, description_texts)
-                loss = loss / accumulation_steps
+            image_tensor = image_tensor.to(
+                device=device, dtype=model.llm.dtype)
+            with torch.amp.autocast(enabled=(model.llm.dtype != torch.float32), dtype=model.llm.dtype):
+                outputs = model(image_tensor, prompt_texts, description_texts)
+                loss = outputs.loss / accumulation_steps
 
             if torch.isnan(loss):
                 logger.warning(
@@ -51,6 +52,13 @@ def train(model, dataloader, optimizer, device, epochs=100, accumulation_steps=2
                 continue
 
             scaler.scale(loss).backward()
+            if outputs.logits is not None:
+                labels = model.llm.tokenizer(description_texts, return_tensors="pt",
+                                             padding=True, truncation=True, max_length=model.llm.max_seq_length)["input_ids"].to(device)
+                accuracy = calculate_token_accuracy(
+                    outputs.logits, labels, model.llm.tokenizer.pad_token_id)
+                batch_accuracies.append(accuracy)
+
             if (i + 1) % accumulation_steps == 0:
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(
@@ -63,26 +71,46 @@ def train(model, dataloader, optimizer, device, epochs=100, accumulation_steps=2
                 total_loss += loss.item() * accumulation_steps
                 processed_batches += 1
 
-            # Tính accuracy
-            accuracy = calculate_accuracy(
-                model(image_tensor), description_texts)
-            total_accuracy += accuracy
+            # Thu thập sample generation nhỏ mỗi 10 batch
+            if i % 10 == 0:
+                model.eval()
+                with torch.no_grad():
+                    for img, ref in zip(image_tensor[:2], description_texts[:2]):
+                        pred = model.generate_caption(img)
+                        epoch_references.append(ref)
+                        epoch_hypotheses.append(pred)
+                model.train()
+
+            del image_tensor, prompt_texts, description_texts
+            torch.cuda.empty_cache()
 
             for param_group in optimizer.param_groups:
                 lr = param_group['lr']
 
+            avg_loss = total_loss / processed_batches if processed_batches > 0 else 0
+            avg_acc = sum(batch_accuracies) / \
+                len(batch_accuracies) if batch_accuracies else 0
+
             pbar.set_postfix(loss=f"{loss.item()*accumulation_steps:.4f}",
-                             avg_loss=f"{total_loss / processed_batches:.4f}" if processed_batches > 0 else "N/A",
-                             accuracy=f"{total_accuracy / processed_batches:.4f}",
+                             avg_loss=f"{avg_loss:.4f}",
+                             avg_acc=f"{avg_acc:.4f}",
                              lr=f"{lr:.6f}")
+        # Tính BLEU, ROUGE cuối epoch
+        if len(epoch_references) > 0:
+            bleu_scores = calculate_bleu_scores(
+                [[r] for r in epoch_references], epoch_hypotheses)
+            rouge_scores = calculate_rouge_scores(
+                epoch_references, epoch_hypotheses)
+        else:
+            bleu_scores = {"BLEU-1": 0, "BLEU-2": 0, "BLEU-3": 0, "BLEU-4": 0}
+            rouge_scores = {"ROUGE-1": 0, "ROUGE-2": 0, "ROUGE-L": 0}
 
-        avg_epoch_loss = total_loss / processed_batches if processed_batches > 0 else 0
-        avg_epoch_accuracy = total_accuracy / \
-            processed_batches if processed_batches > 0 else 0
-        logger.info(f"[Epoch {epoch+1}] Avg Loss: {avg_epoch_loss:.4f}")
-        logger.info(
-            f"[Epoch {epoch+1}] Avg Loss: {avg_epoch_loss:.4f}, Avg Accuracy: {avg_epoch_accuracy:.4f}, Learning Rate: {lr:.6f}")
+        logger.info(f"[Epoch {epoch+1}] Avg Loss: {avg_loss:.4f}")
+        logger.info(f"[Epoch {epoch+1}] Avg Token Accuracy: {avg_acc:.4f}")
+        logger.info(f"[Epoch {epoch+1}] BLEU Scores: {bleu_scores}")
+        logger.info(f"[Epoch {epoch+1}] ROUGE Scores: {rouge_scores}")
 
+        os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, f"model_epoch_{epoch+1}.pt")
         torch.save(model.state_dict(), save_path)
         logger.info(f"Model saved at {save_path}")
@@ -100,6 +128,8 @@ def train(model, dataloader, optimizer, device, epochs=100, accumulation_steps=2
             save_dir, f"cross_attention_epoch_{epoch+1}.pt")
         torch.save(model.cross_attention.state_dict(), cross_attention_path)
         logger.info(f"Cross Attention saved at {cross_attention_path}")
+
+        torch.cuda.empty_cache()
 
 
 def main():

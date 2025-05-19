@@ -7,9 +7,9 @@ from peft import get_peft_model, LoraConfig, TaskType
 from huggingface_hub import login
 from LLaVA.model.vision_encoder_model.EVA_Clip_02 import EVA02VisionTower
 from LLaVA.model.language_model.LLaVA_SeaLLM import LLaVA_seaLLMs
-from LLaVA.fussion_modules.Cross_Attention import CrossAttention
-from LLaVA.stage_1.Captioning import CaptionGenerating
-from LLaVA.stage_1.Dataloader import ImageCaptionDataset
+from LLaVA.model.fussion_modules.Cross_Attention import CrossAttention
+from LLaVA.stage1_description.model import CaptionGenerating
+from LLaVA.stage1_description.dataset import ImageCaptionDataset
 from LLaVA.model.metrics import calculate_token_accuracy, calculate_bleu_scores, calculate_rouge_scores
 import sys
 import os

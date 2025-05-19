@@ -66,17 +66,6 @@ class EVA02VisionTower(nn.Module):
         self.vision_tower = model
         self.is_loaded = True
 
-    # def preprocess_image(self, images):
-    #     # Nếu ảnh đầu vào là list, chuyển thành tensor
-    #     if isinstance(images, list):
-    #         images = torch.stack([self.image_processor(
-    #             image.convert('RGB')) for image in images])
-    #     else:
-    #         # Nếu ảnh đã là tensor thì tiến hành preprocessing cho toàn bộ batch
-    #         images = self.image_processor(images)  # [B, C, H, W]
-
-    #     return images.to(self._device)
-
     def select_features(self, feature_forward):  # [B, 257, 1792]
         if self.select_feature == 'patch':
             # [B, 256, 1792] - delete cls_token
@@ -88,7 +77,6 @@ class EVA02VisionTower(nn.Module):
                 f"Unknown select_feature: {self.select_feature}.")
         return image_features
 
-    # @torch.no_grad()
     def forward(self, images):
         if not self.is_loaded:
             raise RuntimeError(
@@ -107,7 +95,7 @@ class EVA02VisionTower(nn.Module):
 
     @property
     def dtype(self):
-        return self.vision_tower.dtype
+        return next(self.vision_tower.parameters()).dtype
 
     @property
     def device(self):
@@ -117,7 +105,13 @@ class EVA02VisionTower(nn.Module):
     def embed_dims(self):
         if not self.is_loaded:
             self.load_model()
-        return self.vision_tower.num_features
+        if hasattr(self.vision_tower, "embed_dim"):
+            return self.vision_tower.embed_dim
+        elif hasattr(self.vision_tower, "num_features"):
+            return self.vision_tower.num_features
+        else:
+            raise AttributeError(
+                "Cannot determine embed_dims from vision_tower.")
 
     @property
     def transform(self):

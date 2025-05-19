@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import logging
+logger = logging.getLogger(__name__)
 
 
 class LLaVA_seaLLMs(nn.Module):
@@ -18,6 +20,14 @@ class LLaVA_seaLLMs(nn.Module):
         self.delay_load = delay_load
         self.requires_grad = requires_grad
         self.device_map = self._decide_device_map(device_map)
+        try:
+            self.compute_dtype = torch.bfloat16
+            _ = torch.zeros(1, dtype=torch.bfloat16)
+            logger.info("Usng bfloat16 for LLM")
+        except RuntimeError:
+            self.compute_dtype = torch.float32
+            logger.warning(
+                "bfloat16 not supported, falling back to float32. This might be less stable.")
 
         self.model = None
         self.tokenizer = None
@@ -32,29 +42,40 @@ class LLaVA_seaLLMs(nn.Module):
         if torch.cuda.is_available():
             gpu_count = torch.cuda.device_count()
             if gpu_count >= 2:
+                logger.info(
+                    f"Found {gpu_count} GPUs. Using 'balanced' device map.")
                 return "balanced"
             else:
+                logger.info("Found 1 GPU. Using 'auto' device map.")
                 return "auto"
         else:
+            logger.info("No CUDA GPUs found. Using 'cpu' device map.")
             return "cpu"
 
     def load_model(self):
         """Load the model and tokenizer."""
+        if self.is_loaded:
+            logger.info(f"Model {self.model_name} already loaded. Skipping.")
+            return
+
+        logger.info(
+            f"Loading LLM model: {self.model_name} with dtype: {self.compute_dtype}")
+
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device_map,
-            torch_dtype=torch.float16,
+            torch_dtype=self.compute_dtype,
             output_hidden_states=True
         )
         self.model.eval()
         self.model.requires_grad_(self.requires_grad)
         # self.model.to(self._device)
 
+        logger.info(f"Loading tokenizer: {self.model_name}")
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.tokenizer.padding_side = "left"
-        self.tokenizer.truncation_side = "left"
-        self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+        if self.tokenizer.pad_token_id is None or self.tokenizer.pad_token_id != self.tokenizer.eos_token_id:
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
         self.embed_dim = self.model.config.hidden_size
         self.max_seq_length = self.model.config.max_position_embeddings
@@ -65,6 +86,9 @@ class LLaVA_seaLLMs(nn.Module):
         """
         Tokenize the text and prepare it for the model
         """
+        if not self.is_loaded:
+            self.load_model()
+
         if isinstance(text, str):
             text = [text]
 
@@ -77,7 +101,13 @@ class LLaVA_seaLLMs(nn.Module):
         )
         device = next(self.model.parameters()).device
 
-        return {k: v.to(device) for k, v in tokens.items()}
+        try:
+            device = self.model.get_input_embeddings().weight.device
+            return {k: v.to(device) for k, v in tokens.items()}
+        except Exception as e:
+            logger.warning(
+                f"Could not determine model device for token moving: {e}. Tokens remain on default device.")
+            return tokens
 
     def embeddings(self, input_ids):
         """
@@ -90,13 +120,38 @@ class LLaVA_seaLLMs(nn.Module):
         Returns:
             torch.Tensor: The embeddings of the text.
         """
+        if not self.is_loaded:
+            self.load_model()
+        if not isinstance(input_ids, dict) or 'input_ids' not in input_ids:
+            raise ValueError(
+                "Input to embeddings must be a dictionary from the tokenizer containing 'input_ids'.")
+
+        # Ensure inputs are on the correct device
+        try:
+            device = self.model.get_input_embeddings().weight.device
+            input_ids = {k: v.to(device) for k, v in input_ids.items()}
+        except Exception as e:
+            logger.warning(f"Could not move input_ids to model device: {e}")
+
         outputs = self.model(**input_ids)
 
         # Return the embeddings of the last hidden state
-        return outputs.hidden_states[-1]
+        return outputs.hidden_states[-1].to(self.compute_dtype)
 
     def forward(self, text):
         """The forward method to pass the text and get the embeddings."""
+        if not self.is_loaded:
+            self.load_model()
         inputs = self.tokenize(text)
         text_embeddings = self.embeddings(inputs)
         return text_embeddings
+
+    @property
+    def embed_dims(self):
+        if not self.is_loaded:
+            self.load_model()
+        return self.embed_dim
+
+    @property
+    def dtype(self):
+        return self.compute_dtype

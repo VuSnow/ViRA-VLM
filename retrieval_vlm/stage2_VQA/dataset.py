@@ -4,14 +4,15 @@ from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 
 
-class ImageCaptionDataset(Dataset):
-    def __init__(self, images, descriptions, transform, prompt="Mô tả chi tiết bức ảnh:"):
-        super(ImageCaptionDataset, self).__init__()
+class VisualQuestionAnsweringDataset(Dataset):
+    def __init__(self, images, descriptions, transform, questions, answers):
+        super(VisualQuestionAnsweringDataset, self).__init__()
         assert len(images) == len(descriptions)
         self.images = images
         self.descriptions = descriptions
         self.transform = transform
-        self.prompt = prompt
+        self.question = questions
+        self.answer = answers
 
     def __len__(self):
         return len(self.images)
@@ -20,4 +21,6 @@ class ImageCaptionDataset(Dataset):
         image = self.images[idx].convert("RGB")
         image_tensor = self.transform(image)
         description = self.descriptions[idx]
-        return image_tensor, self.prompt, description
+        question = self.question[idx]
+        answer = self.answer[idx]
+        return image_tensor, description, question, answer

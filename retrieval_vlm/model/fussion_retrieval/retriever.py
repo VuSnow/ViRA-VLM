@@ -3,9 +3,9 @@ import os
 import numpy as np
 import faiss
 from torch import nn
-from LLaVA.model.embedding_model import SentenceEmbeddingRetrieval
-from LLaVA.model.fussion_retrieval import CrossAttention
-from LLaVA.model.vision_encoder_model import EVA02VisionTower
+from retrieval_vlm.model.embedding_model import SentenceEmbeddingRetrieval
+from retrieval_vlm.model.attention.cross_attention import CrossAttention
+from retrieval_vlm.model.vision_encoder_model.eva_clip import EvaClip
 
 
 class Retriever(nn.Module):
@@ -20,7 +20,7 @@ class Retriever(nn.Module):
                  ):
         super(Retriever, self).__init__()
         # init vision model
-        self.vision_model = vision_encoder if vision_encoder else EVA02VisionTower()
+        self.vision_model = vision_encoder if vision_encoder else EvaClip()
         self.vision_dim = self.vision_model.embed_dims
 
         # init text model

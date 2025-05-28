@@ -122,4 +122,3 @@ class CrossAttention(nn.Module):
     @property
     def dim(self):
         return self.hidden_dim
-

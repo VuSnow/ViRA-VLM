@@ -49,4 +49,3 @@ class ImageCaptionDataset(Dataset):
             'attention_mask': attention_mask,
             'labels': labels
         }
-

@@ -2,7 +2,7 @@ from transformers import PretrainedConfig
 from easydict import EasyDict
 
 class GeneratingCaptionConfig(PretrainedConfig):
-    model_type = "generating_caption"
+    model_type = "vqa_model"
     def __init__(
         self,
         vision_encoder_config: EasyDict = None,

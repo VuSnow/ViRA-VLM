@@ -11,7 +11,7 @@ class EvaClip(nn.Module):
         self._validate_config(config)
         self.config = config
         self.model = create_model(
-            model_name=self.config.name,
+            model_name="timm/eva02_small_patch14_336.mim_in22k_ft_in1k",
             pretrained=self.config.pretrained,
             out_indices=(self.config.select_layer,),
         )
@@ -29,6 +29,7 @@ class EvaClip(nn.Module):
         """
         if not isinstance(image_tensor, torch.Tensor):
             raise TypeError(f"Expected input to be a Tensor of shape [B, 3, H, W]")
+        image_tensor = image_tensor.to(next(self.model.parameters()).device)
 
         features = self.model.forward_features(image_tensor)
         if self.config.select_feature == 'patch':

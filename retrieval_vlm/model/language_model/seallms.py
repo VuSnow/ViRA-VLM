@@ -79,6 +79,7 @@ class SeaLLMs(nn.Module):
             if field not in config:
                 raise ValueError(f"SeaLLMs config missing required field: {field}")
 
+
     @property
     def dim(self) -> int:
         """
@@ -94,3 +95,26 @@ class SeaLLMs(nn.Module):
     def device(self) -> torch.device:
         return self.model.device
         
+    # # Thêm hàm này vào:
+    # def prepare_inputs_for_generation(
+    #     self,
+    #     input_ids,
+    #     past_key_values=None,
+    #     attention_mask=None,
+    #     **kwargs
+    # ):
+    #     # Nếu có self.model là Hugging Face model, gọi lại:
+    #     if hasattr(self, "model") and hasattr(self.model, "prepare_inputs_for_generation"):
+    #         return self.model.prepare_inputs_for_generation(
+    #             input_ids=input_ids,
+    #             past_key_values=past_key_values,
+    #             attention_mask=attention_mask,
+    #             **kwargs
+    #         )
+    #     # Nếu không, trả về dict giống như forward
+    #     return {
+    #         "input_ids": input_ids,
+    #         "past_key_values": past_key_values,
+    #         "attention_mask": attention_mask,
+    #         **kwargs
+    #     }

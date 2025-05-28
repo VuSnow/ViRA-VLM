@@ -37,13 +37,13 @@ class GeneratingCaption(PreTrainedModel, GenerationMixin):
                 r = self.config.lora.get("r", 0),
                 lora_alpha = self.config.lora.get("lora_alpha", 1),
                 lora_dropout = self.config.lora.get("lora_dropout", 0),
-                target_modules = self.config.lora.get("target_modules", ["all"]),
+                target_modules = ["q_proj", "v_proj"],
                 bias = "none",
                 task_type = "CAUSAL_LM"
             )
             self.llm = get_peft_model(self.llm.model, lora_config)
-            self.vision_encoder = get_peft_model(self.vision_encoder, lora_config)
-            self.cross_attention = get_peft_model(self.cross_attention, lora_config)
+            # self.vision_encoder = get_peft_model(self.vision_encoder, lora_config)
+            # self.cross_attention = get_peft_model(self.cross_attention, lora_config)
 
     def forward(
         self, 
@@ -56,36 +56,39 @@ class GeneratingCaption(PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         **kwargs
     ):
-        # Chỉ giữ lại việc chuyển đổi dtype cho các tensor cần dtype cụ thể
-        print("\n1. Converting input tensors to appropriate dtypes:")
-        input_ids = input_ids.to(dtype=torch.long)
-        image_tensor = image_tensor.to(dtype=self._dtype)
-        attention_mask = attention_mask.to(dtype=torch.float32) if attention_mask is not None else None
-        if labels is not None:
-            labels = labels.to(dtype=torch.long)
-
-        print("\n4. Processing Vision:")
-        features_embedding = self.vision_encoder(image_tensor)
-        features_embedding = features_embedding.to(dtype=self._dtype)
-
-        print("\n5. Processing Question:")
-        question_inputs = self.llm.model.get_input_embeddings()(input_ids)
+        device = next(self.cross_attention.parameters()).device
         
-        print("\n6. Performing Cross-Attention:")
-        fused = self.cross_attention(
+        # Chỉ giữ lại việc chuyển đổi dtype cho các tensor cần dtype cụ thể
+        # print("\n1. Converting input tensors to appropriate dtypes:")
+        input_ids = input_ids.to(device=device, dtype=torch.long)
+        image_tensor = image_tensor.to(device=device, dtype=self._dtype)
+        attention_mask = attention_mask.to(device=device, dtype=torch.float32) if attention_mask is not None else None
+        if labels is not None:
+            labels = labels.to(device=device, dtype=torch.long)
+
+        # print("\n4. Processing Vision:")
+        features_embedding = self.vision_encoder(image_tensor)
+        features_embedding = features_embedding.to(device=device, dtype=self._dtype)
+
+        # print("\n5. Processing Question:")
+        question_inputs = self.llm.model.get_input_embeddings()(input_ids)
+        question_inputs = question_inputs.to(device=device, dtype=self._dtype)
+        
+        # print("\n6. Performing Cross-Attention:")
+        fused, attn_weights = self.cross_attention(
             query=question_inputs,
             key=features_embedding,
             value=features_embedding,
             need_weights=True
         )
 
-        print("\n7. Performing final logits calculation:")
+        # print("\n7. Performing final logits calculation:")
         logits = self.llm.model.lm_head(fused)
         loss = None
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
-        print(f"\n8. Loss: {loss}")
+        # print(f"\n8. Loss: {loss}")
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,

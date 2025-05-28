@@ -195,8 +195,6 @@ def main():
         weight_decay=0.01,
         warmup_steps=500,
         logging_steps=10,
-        evaluation_strategy="steps",
-        eval_steps=100,
         save_strategy="no",  # We'll handle saving in our custom trainer
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",

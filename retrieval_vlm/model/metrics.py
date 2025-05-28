@@ -1,7 +1,9 @@
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
+from datasets import load_metric
 import nltk
 import torch
+import numpy as np
 
 
 def calculate_accuracy(predictions, labels):
@@ -95,3 +97,45 @@ def calculate_token_accuracy(logits, labels, pad_token_id):
     correct = (preds == labels) & mask
     accuracy = correct.sum().item() / mask.sum().item() if mask.sum().item() > 0 else 0.0
     return accuracy
+
+bleu = load_metric("bleu")
+rouge = load_metric("rouge")
+
+def compute_metrics(eval_pred, tokenizer):
+    predictions, labels = eval_pred
+    # Decode id -> text nếu cần
+    # Nếu model dùng padding, labels sẽ có -100, cần đổi lại thành tokenizer.pad_token_id để decode đúng
+    predictions = np.argmax(predictions, axis=-1) if predictions.ndim == 3 else predictions
+    pred_str = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+    # labels: [batch, seq_len], cần đổi -100 thành pad_token_id
+    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+    label_str = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    # Chuyển về list các list cho BLEU (ref dạng [[sentence]])    
+    label_str = [[l] for l in label_str]
+    # BLEU expects list of [ref], pred
+    bleu_score = bleu.compute(predictions=pred_str, references=label_str)['bleu']
+    rouge_score = rouge.compute(predictions=pred_str, references=[l[0] for l in label_str], use_stemmer=True)
+    return {
+        "bleu": bleu_score,
+        "rougeL": rouge_score["rougeL"].mid.fmeasure,
+    }
+
+class MetricComputer:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.bleu = load_metric("bleu")
+        self.rouge = load_metric("rouge")
+    def __call__(self, eval_pred):
+        predictions, labels = eval_pred
+        if predictions.ndim == 3:
+            predictions = predictions.argmax(-1)
+        pred_str = self.tokenizer.batch_decode(predictions, skip_special_tokens=True)
+        labels = np.where(labels != -100, self.tokenizer.pad_token_id, labels)
+        label_str = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
+        label_str = [[l] for l in label_str]
+        bleu_score = self.bleu.compute(predictions=pred_str, references=label_str)['bleu']
+        rouge_score = self.rouge.compute(predictions=pred_str, references=[l[0] for l in label_str], use_stemmer=True)
+        return {
+            "bleu": bleu_score,
+            "rougeL": rouge_score["rougeL"].mid.fmeasure,
+        }

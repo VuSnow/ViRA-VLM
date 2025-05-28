@@ -4,7 +4,6 @@ import logging
 from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
 logger = logging.getLogger(__name__)
 
-
 class CaptionGenerating(nn.Module):
     def __init__(self, vision_encoder, cross_attention, llm):
         super(CaptionGenerating, self).__init__()

@@ -13,7 +13,7 @@ import os
 
 def main():
     parser = argparse.ArgumentParser(description="Training description generating model")
-    parser.add_argument("--config", type=str, default="./config/config.yaml", help="Path to the config file")
+    parser.add_argument("--config", type=str, default="/workspace/Vi-VLM-TTDN/retrieval_vlm/stage1_description/config/config.yaml", help="Path to the config file")
     parser.add_argument("--dataset", type=str, default="5CD-AI/Viet-OCR-VQA-flash2", help="Dataset name")
     args = parser.parse_args()
 
@@ -37,20 +37,21 @@ def main():
     ])
     # Load dataset
     dataset = load_dataset(args.dataset)
+    dataset = dataset["train"].select(range(1000))
     # Split dataset
-    split_dataset = dataset["train"].train_test_split(test_size=0.1, seed=42)
+    split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
     train_data = split_dataset['train']
     test_data = split_dataset['test']
     # Create captioning train dataset
     captioning_train_dataset = ImageCaptionDataset(
         dataset=train_data,
-        transform=transforms,
+        transform=transform,
         tokenizer=tokenizer
     )
     # Create captioning eval dataset
     captioning_eval_dataset = ImageCaptionDataset(
         dataset=test_data,
-        transform=transforms,
+        transform=transform,
         tokenizer=tokenizer
     )
     

@@ -16,7 +16,7 @@ class GeneratingCaption(PreTrainedModel, GenerationMixin):
         super(GeneratingCaption, self).__init__(config)
         self.config = config
 
-        self.llm = SeaLLMs(config.llm_config)
+        self.llm = SeaLLMs(config.language_model)
         self._dtype = self.llm.dtype
 
         self.vision_encoder = EvaClip(self.config.vision_encoder_config).to(self._dtype)

@@ -12,4 +12,6 @@ peft
 timm
 matplotlib
 nltk
-
+rouge_score
+evaluate
+easydict

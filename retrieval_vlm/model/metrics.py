@@ -1,6 +1,6 @@
 # from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 # from rouge_score import rouge_scorer
-from datasets import load_metric
+# from datasets import load_metric
 # import nltk
 import torch
 import numpy as np

@@ -1,0 +1,50 @@
+vision_encoder_config:
+  name: "timm/eva02_small_patch14_336.mim_in22k_ft_in1k"
+  pretrained: true
+  select_layer: -2
+  select_feature: "patch"
+  image_size: 336
+  mean: [0.48145466, 0.4578275, 0.40821073]
+  std: [0.26862954, 0.26130258, 0.27577711]
+  delay_load: false
+  unfreeze: false
+
+cross_attention_config:
+  num_heads: 8
+  ffn_multiplier: 4
+  dropout: 0.1
+
+language_model:
+  name: "SeaLLMs/SeaLLMs-v3-1.5B"
+  delay_load: false
+  requires_grad: true
+  unfreeze: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.1
+  target_modules:
+    - "all"
+
+train_config:
+  output_dir: "./checkpoints"
+  batch_size: 16
+  learning_rate: 1e-5
+  weight_decay: 0.01
+  num_epochs: 10
+  gradient_accumulation_steps: 2
+  max_grad_norm: 1.0
+  logging_dir: "./logs"
+  logging_steps: 100
+  save_steps: 100
+  save_total_limit: 1
+  save_strategy: "epoch"
+  eval_strategy: "epoch"
+  metric_for_best_model: "bleu"
+  greater_is_better: true
+  load_best_model_at_end: true
+  disable_tqdm: false
+  dataloader_num_workers: 4
+  optim: "adamw_torch"
+

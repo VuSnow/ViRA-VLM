@@ -10,6 +10,7 @@ from retrieval_vlm.stage1_description.dataset.vqa_collator import VQADataCollato
 from retrieval_vlm.stage1_description.model.generating_caption import GeneratingCaption
 from retrieval_vlm.stage1_description.config.model_config import GeneratingCaptionConfig
 import logging
+import torch
 logger = logging.getLogger(__name__)
 
 class Train:
@@ -65,6 +66,12 @@ class Train:
 
     def train(self):
         self.trainer.train()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
     def evaluate(self):
         self.trainer.evaluate()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()

@@ -93,8 +93,8 @@ class GeneratingCaption(PreTrainedModel, GenerationMixin):
             loss=loss,
             logits=logits,
             # past_key_values=None,
-            hidden_states=fused if output_hidden_states else None,
-            attentions=self.cross_attention.attention_weights if output_attentions else None
+            hidden_states=None,
+            attentions=None
         )
     
     def prepare_inputs_for_generation(

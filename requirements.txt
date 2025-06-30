@@ -14,3 +14,7 @@ nltk
 rouge_score
 evaluate
 easydict
+matplotlib
+nltk
+sacrebleu
+tensorboardX

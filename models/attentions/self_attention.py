@@ -72,6 +72,7 @@ class SelfAttention(nn.Module):
         if key_padding_mask is not None:
             key_padding_mask = key_padding_mask.to(dtype=torch.bool)
 
+        attn_weights = None
         if need_weights:
             attn_output, attn_weights = self.attention(
                 query=query_proj,
@@ -92,10 +93,8 @@ class SelfAttention(nn.Module):
         x = self.layer_norm1(attn_output + query_proj)
         ffn_output = self.ffn(x)
         output = self.layer_norm2(ffn_output + x)
-        return {
-            "output": output,
-            "attn_weights": attn_weights if need_weights else None,
-        }
+
+        return output, attn_weights if need_weights else None
 
     @property
     def dim(self):

@@ -9,9 +9,9 @@ class EvaClip(nn.Module):
         super(EvaClip, self).__init__()
         self.config = config
         self.model = create_model(
-            model_name=self.config.name,
-            pretrained=self.config.pretrained,
-            out_indices=(self.config.select_layer,)
+            model_name=self.config['name'],
+            pretrained=self.config['pretrained'],
+            out_indices=(self.config['select_layer'],)
         )
 
     def forward(self, image_tensor: torch.Tensor):
@@ -31,13 +31,15 @@ class EvaClip(nn.Module):
 
         image_tensor = image_tensor.to(next(self.model.parameters()).device)
         features = self.model.forward_features(image_tensor)
-        if self.config.select_feature == 'patch':
+
+        # SỬA LỖI: Dùng ['key'] thay vì .key
+        if self.config['select_feature'] == 'patch':
             return features[:, 1:, :]
-        elif self.config.select_feature == 'cls_patch':
+        elif self.config['select_feature'] == 'cls_patch':
             return features
         else:
             raise ValueError(
-                f"Invalid select_feature: {self.config.select_feature}")
+                f"Invalid select_feature: {self.config['select_feature']}")
 
     def _validate_config(self, config: EasyDict) -> None:
         """Validate the configuration"""

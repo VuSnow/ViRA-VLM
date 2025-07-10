@@ -1,5 +1,7 @@
 from PIL import Image, UnidentifiedImageError
 import io
+import re
+import os
 
 
 def print_trainable_parameters(model):
@@ -26,3 +28,19 @@ def check_image_validity(example, index):
         return True
     except (UnicodeDecodeError, UnidentifiedImageError, OSError, TypeError, KeyError):
         return False
+
+
+def find_best_checkpoint(output_dir):
+    checkpoints = []
+    pattern = re.compile(r"checkpoint-(\d+)")
+    for name in os.listdir(output_dir):
+        full_path = os.path.join(output_dir, name)
+        if os.path.isdir(full_path):
+            match = pattern.match(name)
+            if match:
+                step = int(match.group(1))
+                checkpoints.append((step, full_path))
+    if not checkpoints:
+        raise FileNotFoundError(f"No checkpoint found in {output_dir}")
+    best_ckpt = max(checkpoints, key=lambda x: x[0])[1]
+    return best_ckpt

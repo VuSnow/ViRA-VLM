@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import gc
 
-# Tải các metrics một lần bên ngoài
+# Load metrics once outside
 bleu = evaluate.load("bleu")
 rouge = evaluate.load("rouge")
 meteor = evaluate.load("meteor")
@@ -11,28 +11,28 @@ meteor = evaluate.load("meteor")
 
 def build_compute_metrics(tokenizer):
     def compute_metrics(eval_pred):
-        # eval_pred.predictions bây giờ là các prediction_ids đã được xử lý trước
-        # nhờ vào preprocess_logits_for_metrics.
-        predictions_ids, labels = eval_pred.predictions, eval_pred.label_ids
+        # eval_pred.predictions is now the prediction_ids processed by preprocess_logits_for_metrics.
+        # From the returned tuple (predictions_ids, labels), we can get the predictions and labels.
+        predictions_ids, labels = eval_pred.predictions[0], eval_pred.label_ids
 
         if np.any(predictions_ids < 0):
             predictions_ids[predictions_ids < 0] = tokenizer.pad_token_id
 
-        # Decode các token IDs dự đoán thành văn bản
+        # Decode the predicted token IDs to text
         decoded_preds = tokenizer.batch_decode(
             predictions_ids, skip_special_tokens=True)
 
-        # Decode các labels
+        # Decode the labels
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
         decoded_labels = tokenizer.batch_decode(
             labels, skip_special_tokens=True)
 
-        # Xử lý hậu kỳ
+        # Post-processing
         decoded_preds = [pred.strip() for pred in decoded_preds]
         decoded_labels = [label.strip() for label in decoded_labels]
         refs_for_bleu = [[label] for label in decoded_labels]
 
-        # Tính toán metrics
+        # Calculate metrics
         bleu_score = bleu.compute(
             predictions=decoded_preds, references=refs_for_bleu)
         rouge_score = rouge.compute(
@@ -54,12 +54,29 @@ def build_compute_metrics(tokenizer):
 
 def preprocess_logits_for_metrics(logits, labels):
     """
-    Hàm này chạy trên GPU. Nó chuyển đổi logits thành các ID dự đoán
-    trước khi chúng được gom lại, giúp tiết kiệm bộ nhớ.
+    This function runs on GPU. It converts logits to predicted IDs
+    before they are gathered, helping to save memory.
     """
-    if isinstance(logits, tuple):
-        logits = logits[0]
 
+    # === DEBUGGING ===
+    if logits is None:
+        print("!!!!!! ERROR: `logits` IS NONE !!!!!!")
+    # else:
+    #     print(f"Type of `logits`: {type(logits)}")
+    #     # If logits is a tuple, print the elements inside
+    #     if isinstance(logits, tuple):
+    #         print(f"  `logits` is a tuple with {len(logits)} elements.")
+    #         for i, item in enumerate(logits):
+    #             if hasattr(item, 'shape'):
+    #                 print(f"  - Element {i}: type={type(item)}, shape={item.shape}")
+    #             else:
+    #                 print(f"  - Element {i}: type={type(item)}")
+    #         # Assume logits actually lies in the first element
+    #         logits = logits[0]
+    #     else:
+    #         print(f"`logits` shape: {logits.shape}")
+
+    # Original logic
     pred_ids = torch.argmax(logits, dim=-1)
-    pred_ids = pred_ids.to(dtype=torch.int32)
-    return pred_ids
+
+    return pred_ids, labels

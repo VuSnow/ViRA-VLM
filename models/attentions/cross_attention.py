@@ -31,6 +31,9 @@ class CrossAttention(nn.Module):
             if self.query_dim != self.hidden_dim else nn.Identity()
         )
 
+        self.query_norm = nn.LayerNorm(self.hidden_dim)
+        self.kv_norm = nn.LayerNorm(self.hidden_dim)
+
         self.proj_k = (
             nn.Linear(in_features=self.kv_dim, out_features=self.hidden_dim)
             if self.kv_dim != self.hidden_dim else nn.Identity()
@@ -79,8 +82,8 @@ class CrossAttention(nn.Module):
             raise TypeError(
                 f"Expected key_value to be a Tensor, but got {type(key_value)}")
 
-        query_proj = self.proj_q(query)
-        kv_proj = self.proj_k(key_value)
+        query_proj = self.query_norm(self.proj_q(query))
+        kv_proj = self.kv_norm(self.proj_k(key_value))
 
         if self.add_positional:
             lq = query_proj.size(1)
@@ -91,6 +94,13 @@ class CrossAttention(nn.Module):
         if kv_mask is not None:
             kv_mask = kv_mask.to(dtype=torch.bool)
 
+        # print("kv_mask", kv_mask.shape, kv_mask.dtype, kv_mask)
+        # print("query_proj", query_proj.shape, torch.isnan(query_proj).any())
+        # print("kv_proj", kv_proj.shape, torch.isnan(kv_proj).any())
+        # print("Mask all masked:", kv_mask.all(dim=1))
+        # print("NaN in query_proj:", torch.isnan(query_proj).any())
+        # print("NaN in kv_proj:", torch.isnan(kv_proj).any())
+        attn_weights = None
         if need_weights:
             attn_output, attn_weights = self.attention(
                 query=query_proj,
@@ -99,6 +109,12 @@ class CrossAttention(nn.Module):
                 key_padding_mask=kv_mask,
                 need_weights=True,
             )
+            # print("attn_weights shape:", attn_weights.shape)
+            # print("attn_weights stats: min", attn_weights.min().item(),
+            #     "max", attn_weights.max().item(),
+            #     "mean", attn_weights.mean().item(),
+            #     "std", attn_weights.std().item())
+            # print("attn_weights[0, :5, :5]:", attn_weights[0, :5, :5])
         else:
             attn_output, _ = self.attention(
                 query=query_proj,
@@ -111,10 +127,7 @@ class CrossAttention(nn.Module):
         x = self.layer_norm1(attn_output + query_proj)
         ffn_output = self.ffn(x)
         output = self.layer_norm2(ffn_output + x)
-        return {
-            "output": output,
-            "attn_weights": attn_weights if need_weights else None,
-        }
+        return output, attn_weights if need_weights else None
 
     @property
     def dim(self):

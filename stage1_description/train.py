@@ -34,10 +34,10 @@ def main():
     parser.add_argument("--split_ratio", type=float,
                         required=True, default=0.1)
     parser.add_argument("--seed", type=int, required=True, default=42)
-    parser.add_argument("--freeze_llm", type=bool,
-                        required=True, default=False)
-    parser.add_argument("--freeze_vision", type=bool,
-                        required=True, default=False)
+    parser.add_argument(
+        "--freeze_llm", type=lambda x: x.lower() == "true", default=False)
+    parser.add_argument("--freeze_vision",
+                        type=lambda x: x.lower() == "true", default=False)
 
     args = parser.parse_args()
 
@@ -47,13 +47,13 @@ def main():
     model_config = DescriptionModelConfig(**configs)
     model = DescriptionModel(model_config)
 
-#     if args.freeze_llm:
-#         for param in model.llm.parameters():
-#             param.requires_grad = False
+    if args.freeze_llm:
+        for param in model.llm.parameters():
+            param.requires_grad = False
 
-#     if args.freeze_vision:
-#         for param in model.vision.parameters():
-#             param.requires_grad = False
+    if args.freeze_vision:
+        for param in model.vision.parameters():
+            param.requires_grad = False
 
     dtype = model.llm.dtype
     model = model.to(dtype=dtype)

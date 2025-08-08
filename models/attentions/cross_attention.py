@@ -123,11 +123,7 @@ class CrossAttention(nn.Module):
                 key_padding_mask=kv_mask,
                 need_weights=False,
             )
-
-        x = self.layer_norm1(attn_output + query_proj)
-        ffn_output = self.ffn(x)
-        output = self.layer_norm2(ffn_output + x)
-        return output, attn_weights if need_weights else None
+        return attn_output, attn_weights if need_weights else None
 
     @property
     def dim(self):

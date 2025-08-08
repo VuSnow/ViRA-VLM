@@ -61,22 +61,7 @@ def preprocess_logits_for_metrics(logits, labels):
     # === DEBUGGING ===
     if logits is None:
         print("!!!!!! ERROR: `logits` IS NONE !!!!!!")
-    # else:
-    #     print(f"Type of `logits`: {type(logits)}")
-    #     # If logits is a tuple, print the elements inside
-    #     if isinstance(logits, tuple):
-    #         print(f"  `logits` is a tuple with {len(logits)} elements.")
-    #         for i, item in enumerate(logits):
-    #             if hasattr(item, 'shape'):
-    #                 print(f"  - Element {i}: type={type(item)}, shape={item.shape}")
-    #             else:
-    #                 print(f"  - Element {i}: type={type(item)}")
-    #         # Assume logits actually lies in the first element
-    #         logits = logits[0]
-    #     else:
-    #         print(f"`logits` shape: {logits.shape}")
 
-    # Original logic
     pred_ids = torch.argmax(logits, dim=-1)
 
     return pred_ids, labels

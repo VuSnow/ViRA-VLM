@@ -28,7 +28,7 @@ def find_best_checkpoint(output_dir, best_step):
 # --- CONFIG ---
 CONFIG_PATH = "/home/user05/dungvm/configs/configs.yaml"
 OUTPUT_DIR = "/home/user05/dungvm/stage1_description/outputs/stage1"
-BEST_STEP = 145
+BEST_STEP = 22500
 CHECKPOINT_PATH = find_best_checkpoint(OUTPUT_DIR, BEST_STEP)
 print(f"Sử dụng checkpoint TỐT NHẤT được khuyến nghị: {CHECKPOINT_PATH}")
 
@@ -88,25 +88,24 @@ def main():
 
     # Chuyển model sang chế độ eval và đưa lên GPU nếu có
     print("4. Moving model to device...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model.to(device)
     model.eval()
-    print(f"Model loaded on device: {device}")
+    # print(f"Model loaded on device: {device}")
 
     dataset = load_from_disk(DATASET_PATH)
-    sample = dataset[0]
+    sample = dataset[1]
     image = sample['image']
 
     # Chuẩn bị ảnh
     # Thêm unsqueeze(0) để tạo batch dimension
-    image_tensor = image_transform(
-        image.convert("RGB")).unsqueeze(0).to(device)
-    saved_image_path = os.path.join("/home/user05/dungvm", f"test_image.png")
+    image_tensor = image_transform(image.convert("RGB")).unsqueeze(0)
+    saved_image_path = os.path.join("/home/user05/dungvm", f"test_image_1.png")
     image.save(saved_image_path)
 
     print(f"6. Preparing prompt...")
     # Tokenize prompt và đưa lên device
-    prompt_encoding = tokenizer(PROMPT, return_tensors="pt").to(device)
+    prompt_encoding = tokenizer(PROMPT, return_tensors="pt")
 
     print("\n7. Generating description...")
     try:

@@ -9,8 +9,9 @@ class Qwen2DecoderLayerWithCrossAttn(Qwen2DecoderLayer):
         super().__init__(config, layer_idx)
         self.cross_attn_module = cross_attn_module
         self.cross_attn_ln = nn.LayerNorm(config.hidden_size)
-        self.post_cross_attention_layernorm = nn.LayerNorm(
+        self.cross_attn_layernorm = nn.LayerNorm(
             config.hidden_size, eps=config.rms_norm_eps)
+        self.cross_attn_dropout = nn.Dropout(p=0.1)
         self.layer_idx = layer_idx
 
     def forward(
@@ -53,7 +54,7 @@ class Qwen2DecoderLayerWithCrossAttn(Qwen2DecoderLayer):
             if vision_emb.dtype != hidden_states.dtype:
                 vision_emb = vision_emb.to(hidden_states.dtype)
             residual = hidden_states
-            hidden_states = self.post_cross_attention_layernorm(hidden_states)
+            hidden_states = self.cross_attn_layernorm(hidden_states)
 
             cross_attn_out, _ = self.cross_attn_module(
                 query=hidden_states,
@@ -61,7 +62,17 @@ class Qwen2DecoderLayerWithCrossAttn(Qwen2DecoderLayer):
                 kv_mask=vision_mask,
                 need_weights=False,
             )
-            hidden_states = residual + cross_attn_out
+            if torch.isnan(cross_attn_out).any() or torch.isinf(cross_attn_out).any():
+                print(
+                    f"Cross-Attention output is nan at layer {self.layer_idx}")
+                print(f"Vision emb: {vision_emb.shape}, {vision_emb.dtype}")
+                print(
+                    f"Hidden states: {hidden_states.shape}, {hidden_states.dtype}")
+                print(f"Residual: {residual.shape}, {residual.dtype}")
+                print(
+                    f"Cross-Attention output: {cross_attn_out.shape}, {cross_attn_out.dtype}")
+                raise ValueError("Cross-Attention output is nan")
+            hidden_states = residual + self.cross_attn_dropout(cross_attn_out)
 
         # 3. MLP Block (Feed-Forward Network)
         residual = hidden_states

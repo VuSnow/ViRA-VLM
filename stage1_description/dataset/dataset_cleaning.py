@@ -12,11 +12,11 @@ def check_image_validity(example, index):
     """
     This function checks the validity of an image and returns a dictionary containing an 'is_valid' flag.
     It is designed to be used with `dataset.map()`.
-    
+
     Args:
         example (dict): A sample from the dataset.
         index (int): Index of the sample (provided by `with_indices=True`).
-    
+
     Returns:
         dict: {'is_valid': True} if the image is valid, {'is_valid': False} if there's an error.
     """

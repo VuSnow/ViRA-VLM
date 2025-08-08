@@ -68,14 +68,14 @@ training:
   logging_dir: "/home/user05/dungvm/stage1_description/logs/stage1"
   logging_strategy: "steps"
   logging_first_step: true
-  logging_steps: 10
+  logging_steps: 100
   save_strategy: "epoch"
   save_total_limit: 1
   save_safetensors: true
   seed: 42
-  bf16: true
+  bf16: false
   fp16: false
-  dataloader_num_workers: 4
+  dataloader_num_workers: 8
   disable_tqdm: false
   load_best_model_at_end: true
   metric_for_best_model: "rougeL"

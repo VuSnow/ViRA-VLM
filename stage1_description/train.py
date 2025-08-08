@@ -82,7 +82,7 @@ def main():
     model = DescriptionModel(model_config)
     model.llm.resize_token_embeddings(len(tokenizer))
     model.llm.tie_weights()
-    # model.llm.gradient_checkpointing_enable()
+    # model.gradient_checkpointing_enable()
     print(f"Model embedding size resized to: {len(tokenizer)}")
 
     print(f"7. Freezing model parameters")
@@ -94,7 +94,8 @@ def main():
             param.requires_grad = False
     print(f"8. Converting model to {model.llm.dtype} dtype")
     dtype = model.llm.dtype
-    model = model.to(dtype=dtype)
+    # model = model.to(dtype=torch.bfloat16)
+    print(f"8.1. Model dtype: {model.llm.dtype}")
     print_trainable_parameters(model)
 
     print(f"9. Logging in Hugging Face")
@@ -122,6 +123,7 @@ def main():
         gradient_accumulation_steps=configs.training.gradient_accumulation_steps,
         eval_accumulation_steps=configs.training.eval_accumulation_steps,
         learning_rate=float(configs.training.learning_rate),
+        lr_scheduler_type="cosine",
         weight_decay=configs.training.weight_decay,
         optim=configs.training.optim,
         num_train_epochs=configs.training.num_train_epochs,
@@ -145,6 +147,7 @@ def main():
         max_grad_norm=configs.training.max_grad_norm,
         warmup_ratio=configs.training.warmup_ratio,
         ddp_find_unused_parameters=True,
+        # gradient_checkpointing=True,
     )
     print(f"12. Initializing data collator")
     data_collator = DataCollator(
@@ -188,6 +191,8 @@ def main():
         print(f"Last checkpoint: {last_checkpoint}")
     print(f"18. Starting training")
     trainer.train()
+    print(
+        f"After training start - model dtype: {next(model.parameters()).dtype}")
     # tokenizer.save_pretrained(configs.training.output_dir)
     # model.save_pretrained(configs.training.output_dir)
 

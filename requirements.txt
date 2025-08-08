@@ -11,10 +11,8 @@ peft
 timm
 matplotlib
 nltk
+easydict
+tensorboardX
 rouge_score
 evaluate
-easydict
-matplotlib
-nltk
 sacrebleu
-tensorboardX

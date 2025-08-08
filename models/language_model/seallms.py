@@ -24,7 +24,8 @@ class SeaLLMs(nn.Module):
         # Load the model
         self.model = AutoModelForCausalLM.from_pretrained(
             self.config['name'],
-            config=base_llm_config
+            config=base_llm_config,
+            ignore_mismatched_sizes=True,
         )
         self.model.tie_weights()
 
@@ -33,24 +34,48 @@ class SeaLLMs(nn.Module):
 
         # Replace the default decoder layer with the custom one
         inject_layers = self.config['inject_layers']
-        num_layers = self.model.model.config.num_hidden_layers
-        inject_layers = list(range(num_layers - inject_layers, num_layers))
-        for i in inject_layers:
-            cross_attn_module = CrossAttention(
-                query_dim=self.model.model.config.hidden_size,
-                kv_dim=self.model.model.config.hidden_size,
-                hidden_dim=self.model.model.config.hidden_size,
+        num_layers = self.model.config.num_hidden_layers
+        if num_layers < 2 * inject_layers:
+            raise ValueError(
+                f"Number of layers ({num_layers}) must be at least 2 * inject_layers ({2 * inject_layers})")
+        print(
+            f"--- Inject cross-attention in first {inject_layers} layers ---")
+        first_inject_layers = list(range(0, inject_layers))
+        for i in first_inject_layers:
+            cross_attn_module_first = CrossAttention(
+                query_dim=self.model.config.hidden_size,
+                kv_dim=self.model.config.hidden_size,
+                hidden_dim=self.model.config.hidden_size,
                 num_heads=self.config['num_heads'],
                 ffn_multiplier=self.config['ffn_multiplier'],
                 dropout=self.config['dropout'],
                 add_positional=self.config['add_positional'],
-                max_seq_len=self.model.model.config.max_position_embeddings,
+                max_seq_len=self.model.config.max_position_embeddings,
             )
-            # Lưu ý: bây giờ là self.model.model.layers
             self.model.model.layers[i] = Qwen2DecoderLayerWithCrossAttn(
-                config=self.model.model.config,
+                config=self.model.config,
                 layer_idx=i,
-                cross_attn_module=cross_attn_module,
+                cross_attn_module=cross_attn_module_first,
+            )
+
+        print(f"--- Inject cross-attention in last {inject_layers} layers ---")
+        last_inject_layers = list(
+            range(num_layers - inject_layers, num_layers))
+        for i in last_inject_layers:
+            cross_attn_module_last = CrossAttention(
+                query_dim=self.model.config.hidden_size,
+                kv_dim=self.model.config.hidden_size,
+                hidden_dim=self.model.config.hidden_size,
+                num_heads=self.config['num_heads'],
+                ffn_multiplier=self.config['ffn_multiplier'],
+                dropout=self.config['dropout'],
+                add_positional=self.config['add_positional'],
+                max_seq_len=self.model.config.max_position_embeddings,
+            )
+            self.model.model.layers[i] = Qwen2DecoderLayerWithCrossAttn(
+                config=self.model.config,
+                layer_idx=i,
+                cross_attn_module=cross_attn_module_last,
             )
 
     def forward(self, *args, **kwargs):

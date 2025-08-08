@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import logging
 from easydict import EasyDict
+from torch.utils.checkpoint import checkpoint
 from models.attentions.cross_attention import CrossAttention
 from models.vision_encoder.eva_clip import EvaClip
 from models.language_model.seallms import SeaLLMs
@@ -105,6 +106,9 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
             out_features=self.llm.config.hidden_size,
         )
 
+        print(f"--- Initializing vision layer norm ---")
+        self.vision_layer_norm = nn.LayerNorm(self.llm.config.hidden_size)
+
         print(f"--- Initializing modality embedding for vision and language ---")
         self.modality_embedding = nn.Embedding(
             num_embeddings=2,
@@ -152,15 +156,10 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         if image_tensor is not None:
-            vision_features = self.vision(image_tensor)
-            assert vision_features.requires_grad, "vision_features does not require grad"
+            vision_features = checkpoint(self.vision, image_tensor)
             vision_emb = self.vision_proj(vision_features)
-            assert vision_emb.requires_grad, "vision_emb does not require grad"
+            vision_emb = self.vision_layer_norm(vision_emb)
             batch_size, num_patches, _ = vision_emb.shape
-            # mod_emb = self.modality_embedding(
-            #     torch.zeros((batch_size, num_patches), dtype=torch.long, device=vision_emb.device)
-            # )
-            # vision_emb = vision_emb + mod_emb
             vision_mask = torch.zeros(
                 (batch_size, num_patches),
                 dtype=torch.bool,
@@ -234,6 +233,10 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
         if state_dict is None:
             state_dict = self.state_dict()
         super().save_pretrained(save_directory, state_dict=state_dict, **kwargs)
+
+    def gradient_checkpointing_enable(self, *args, **kwargs):
+        # Chỉ chuyển thẳng cho llm, không cần truyền gì thêm
+        return self.llm.gradient_checkpointing_enable()
 
     @property
     def llm_dim(self):

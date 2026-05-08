@@ -18,7 +18,6 @@ Text Prompt ──► Tokenizer ──► Token Embeddings ───────
 | **Language Model** | [SeaLLMs-v3-1.5B](https://huggingface.co/SeaLLMs/SeaLLMs-v3-1.5B), a Qwen2-based multilingual LLM optimized for Southeast Asian languages. |
 | **Vision-Language Fusion** | Cross-attention layers injected into the **first N** and **last N** decoder layers of the LLM, allowing text hidden states to attend to visual features. |
 | **Deep Fusion** | Multi-layer bidirectional fusion blocks with self-attention + cross-attention for both modalities. |
-| **LoRA** | Low-Rank Adaptation applied to `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `down_proj`, `up_proj`, `lm_head` (r=8, α=32). |
 
 ### Training Pipeline (Stage 1 — Image Description)
 
@@ -165,7 +164,6 @@ All model and training hyperparameters are defined in [`configs/configs.yaml`](c
 - **Vision**: EVA-CLIP model name, image size (448), feature selection (patch/cls_patch)
 - **Language Model**: SeaLLMs-v3-1.5B, number of injected cross-attention layers (2)
 - **Deep Fusion**: number of fusion layers, heads, FFN multiplier
-- **LoRA**: rank, alpha, dropout, target modules
 - **Training**: batch size, learning rate, epochs, gradient accumulation, scheduler, etc.
 
 ## License

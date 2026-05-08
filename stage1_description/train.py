@@ -1,4 +1,3 @@
-from datasets import disable_progress_bar
 from transformers import AutoTokenizer, TrainingArguments, Trainer
 from transformers import EarlyStoppingCallback
 from transformers.trainer_utils import get_last_checkpoint
@@ -27,9 +26,11 @@ def main():
                       "5CD-AI/Viet-Sketches-VQA", "5CD-AI/Viet-Doc-VQA-II"]
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_path", type=str,
-                        default="/models/stage1_description/configs/config.yaml")
+                        default="configs/configs.yaml")
     parser.add_argument("--dataset_name", type=str, required=True,
                         choices=choice_dataset, default="5CD-AI/Viet-LAION-Gemini-VQA")
+    parser.add_argument("--dataset_path", type=str, default=None,
+                        help="Path to local dataset (load_from_disk). If not set, downloads from HuggingFace.")
     parser.add_argument("--num_samples", type=int, required=True, default=1000)
     parser.add_argument("--split_ratio", type=float,
                         required=True, default=0.1)
@@ -94,15 +95,17 @@ def main():
             param.requires_grad = False
     print(f"8. Converting model to {model.llm.dtype} dtype")
     dtype = model.llm.dtype
-    # model = model.to(dtype=torch.bfloat16)
     print(f"8.1. Model dtype: {model.llm.dtype}")
     print_trainable_parameters(model)
 
     print(f"9. Logging in Hugging Face")
     login(os.getenv("HF_TOKEN"))
-    dataset = load_from_disk(
-        "/home/user05/dungvm/stage1_description/dataset/viet_laion_gemini_vqa_cleaned_v2")
-    print(f"Dataset loaded from {dataset}. Number of samples: {len(dataset)}")
+    if args.dataset_path:
+        dataset = load_from_disk(args.dataset_path)
+    else:
+        from datasets import load_dataset
+        dataset = load_dataset(args.dataset_name, split="train")
+    print(f"Dataset loaded. Number of samples: {len(dataset)}")
     dataset = dataset.select(range(args.num_samples))
     split_dataset = dataset.train_test_split(
         test_size=args.split_ratio, seed=args.seed)
@@ -190,7 +193,7 @@ def main():
         last_checkpoint = get_last_checkpoint(configs.training.output_dir)
         print(f"Last checkpoint: {last_checkpoint}")
     print(f"18. Starting training")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=last_checkpoint)
     print(
         f"After training start - model dtype: {next(model.parameters()).dtype}")
     # tokenizer.save_pretrained(configs.training.output_dir)

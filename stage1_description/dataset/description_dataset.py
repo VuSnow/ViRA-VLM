@@ -19,6 +19,9 @@ class DescriptionDataset(Dataset):
         elif isinstance(row['image'], str):
             image_tensor = self.transform(
                 Image.open(row['image']).convert('RGB'))
+        else:
+            raise ValueError(
+                f"Unsupported image type at index {idx}: {type(row['image'])}")
 
         label = row['description']
         return {

@@ -7,7 +7,6 @@ torch
 torchvision
 accelerate
 datasets
-peft
 timm
 matplotlib
 nltk

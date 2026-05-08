@@ -38,21 +38,6 @@ language_model:
   dropout: 0.1
   add_positional: true
 
-use_lora: true
-lora:
-  r: 8
-  lora_alpha: 32
-  lora_dropout: 0.05
-  target_modules:
-    - "q_proj"
-    - "v_proj"
-    - "k_proj"
-    - "o_proj"
-    - "gate_proj"
-    - "down_proj"
-    - "up_proj"
-    - "lm_head"
-
 training:
   output_dir: "/home/user05/dungvm/stage1_description/outputs/stage1"
   overwrite_output_dir: true

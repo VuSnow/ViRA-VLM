@@ -6,14 +6,11 @@ from easydict import EasyDict
 from torch.utils.checkpoint import checkpoint
 from models.attentions.cross_attention import CrossAttention
 from models.vision_encoder.eva_clip import EvaClip
-from models.language_model.seallms import SeaLLMs
 from models.attentions.deep_fusion import DeepFusion
-from models.attentions.self_attention import SelfAttention
 from models.language_model.qwen2_decoder_layer_with_attn import Qwen2DecoderLayerWithCrossAttn
-from transformers import PreTrainedModel, PretrainedConfig, GenerationMixin, AutoConfig, AutoModelForCausalLM, AutoTokenizer
-from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions, CausalLMOutputWithPast
+from transformers import PreTrainedModel, PretrainedConfig, GenerationMixin, AutoConfig, AutoModelForCausalLM
+from transformers.modeling_outputs import CausalLMOutputWithPast
 from typing import Optional, Tuple, Dict, Any
-from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +32,10 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
     def __init__(self, config: DescriptionModelConfig):
         super().__init__(config)
 
-        print(f"--- Initializing DescriptionModel in __init__ ---")
+        logger.info("Initializing DescriptionModel")
         self.config = config
 
         # Initialize language model
-        print(f"--- Initializing language model in __init__ ---")
         llm_config_params = self.config.language_model
         base_llm_config = AutoConfig.from_pretrained(
             llm_config_params['name'],
@@ -57,8 +53,8 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
         if num_layers < 2 * inject_layers:
             raise ValueError(
                 f"Number of layers ({num_layers}) must be at least 2 * inject_layers ({2 * inject_layers})")
-        print(
-            f"--- Inject cross-attention in first {inject_layers} layers ---")
+        logger.info(
+            f"Injecting cross-attention in first {inject_layers} layers")
         first_inject_layers = list(range(0, inject_layers))
         for i in first_inject_layers:
             cross_attn_module_first = CrossAttention(
@@ -77,7 +73,7 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
                 cross_attn_module=cross_attn_module_first,
             )
 
-        print(f"--- Inject cross-attention in last {inject_layers} layers ---")
+        logger.info(f"Injecting cross-attention in last {inject_layers} layers")
         last_inject_layers = list(
             range(num_layers - inject_layers, num_layers))
         for i in last_inject_layers:
@@ -97,19 +93,15 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
                 cross_attn_module=cross_attn_module_last,
             )
 
-        print(f"--- Initializing vision encoder ---")
         self.vision = EvaClip(config=self.config.eva_vision_model)
 
-        print(f"--- Initializing vision projection ---")
         self.vision_proj = nn.Linear(
             in_features=self.vision.dim,
             out_features=self.llm.config.hidden_size,
         )
 
-        print(f"--- Initializing vision layer norm ---")
         self.vision_layer_norm = nn.LayerNorm(self.llm.config.hidden_size)
 
-        print(f"--- Initializing modality embedding for vision and language ---")
         self.modality_embedding = nn.Embedding(
             num_embeddings=2,
             embedding_dim=self.llm.config.hidden_size,
@@ -144,21 +136,29 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.llm.set_output_embeddings(new_embeddings)
 
+    def encode_vision(self, image_tensor: torch.Tensor):
+        """Encode image tensor to vision embeddings. Cached during generation."""
+        vision_features = checkpoint(self.vision, image_tensor)
+        vision_emb = self.vision_proj(vision_features)
+        vision_emb = self.vision_layer_norm(vision_emb)
+        return vision_emb
+
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         image_tensor: Optional[torch.Tensor] = None,
+        vision_emb: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         past_key_values: Optional[list] = None,
         return_dict: Optional[bool] = True,
         **kwargs,
     ):
-        if image_tensor is not None:
-            vision_features = checkpoint(self.vision, image_tensor)
-            vision_emb = self.vision_proj(vision_features)
-            vision_emb = self.vision_layer_norm(vision_emb)
+        if vision_emb is None and image_tensor is not None:
+            vision_emb = self.encode_vision(image_tensor)
+
+        if vision_emb is not None:
             batch_size, num_patches, _ = vision_emb.shape
             vision_mask = torch.zeros(
                 (batch_size, num_patches),
@@ -166,7 +166,6 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
                 device=vision_emb.device,
             )
         else:
-            vision_emb = None
             vision_mask = None
 
         outputs = self.llm(
@@ -198,9 +197,6 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
                 [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
             )
 
-        if model_kwargs.get("image_tensor", None) is not None:
-            model_kwargs["image_tensor"] = model_kwargs["image_tensor"]
-
         return model_kwargs
 
     def prepare_inputs_for_generation(
@@ -215,12 +211,22 @@ class DescriptionModel(PreTrainedModel, GenerationMixin):
         if past_key_values:
             input_ids = input_ids[:, -1:]
 
+        # Cache vision embeddings: encode once on first call, reuse on subsequent calls
+        vision_emb = kwargs.get("vision_emb", None)
+        if vision_emb is None:
+            image_tensor = kwargs.get("image_tensor", None)
+            if image_tensor is not None:
+                vision_emb = self.encode_vision(image_tensor)
+                # Store back into model_kwargs so it persists across steps
+                kwargs["vision_emb"] = vision_emb
+                kwargs.pop("image_tensor", None)
+
         model_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache", True),
-            "image_tensor": kwargs.get("image_tensor", None),
+            "vision_emb": vision_emb,
         }
         return model_inputs
 

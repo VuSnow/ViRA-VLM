@@ -1,7 +1,10 @@
 import torch.nn as nn
 import torch
+import logging
 from typing import Optional, Tuple
 from transformers.models.qwen2.modeling_qwen2 import Qwen2DecoderLayer
+
+logger = logging.getLogger(__name__)
 
 
 class Qwen2DecoderLayerWithCrossAttn(Qwen2DecoderLayer):
@@ -11,7 +14,8 @@ class Qwen2DecoderLayerWithCrossAttn(Qwen2DecoderLayer):
         self.cross_attn_ln = nn.LayerNorm(config.hidden_size)
         self.cross_attn_layernorm = nn.LayerNorm(
             config.hidden_size, eps=config.rms_norm_eps)
-        self.cross_attn_dropout = nn.Dropout(p=0.1)
+        dropout = getattr(config, 'attention_dropout', 0.1)
+        self.cross_attn_dropout = nn.Dropout(p=dropout)
         self.layer_idx = layer_idx
 
     def forward(
@@ -63,14 +67,9 @@ class Qwen2DecoderLayerWithCrossAttn(Qwen2DecoderLayer):
                 need_weights=False,
             )
             if torch.isnan(cross_attn_out).any() or torch.isinf(cross_attn_out).any():
-                print(
-                    f"Cross-Attention output is nan at layer {self.layer_idx}")
-                print(f"Vision emb: {vision_emb.shape}, {vision_emb.dtype}")
-                print(
-                    f"Hidden states: {hidden_states.shape}, {hidden_states.dtype}")
-                print(f"Residual: {residual.shape}, {residual.dtype}")
-                print(
-                    f"Cross-Attention output: {cross_attn_out.shape}, {cross_attn_out.dtype}")
+                logger.warning(
+                    f"Cross-Attention output is nan/inf at layer {self.layer_idx}, "
+                    f"vision_emb: {vision_emb.shape}, hidden: {hidden_states.shape}")
                 raise ValueError("Cross-Attention output is nan")
             hidden_states = residual + self.cross_attn_dropout(cross_attn_out)
 

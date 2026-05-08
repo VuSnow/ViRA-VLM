@@ -29,17 +29,14 @@ class SeaLLMs(nn.Module):
         )
         self.model.tie_weights()
 
-        print("Loaded AutoModelForCausalLM:")
-        print(self.model)
-
         # Replace the default decoder layer with the custom one
         inject_layers = self.config['inject_layers']
         num_layers = self.model.config.num_hidden_layers
         if num_layers < 2 * inject_layers:
             raise ValueError(
                 f"Number of layers ({num_layers}) must be at least 2 * inject_layers ({2 * inject_layers})")
-        print(
-            f"--- Inject cross-attention in first {inject_layers} layers ---")
+        logger.info(
+            f"Inject cross-attention in first {inject_layers} layers")
         first_inject_layers = list(range(0, inject_layers))
         for i in first_inject_layers:
             cross_attn_module_first = CrossAttention(
@@ -58,7 +55,7 @@ class SeaLLMs(nn.Module):
                 cross_attn_module=cross_attn_module_first,
             )
 
-        print(f"--- Inject cross-attention in last {inject_layers} layers ---")
+        logger.info(f"Inject cross-attention in last {inject_layers} layers")
         last_inject_layers = list(
             range(num_layers - inject_layers, num_layers))
         for i in last_inject_layers:

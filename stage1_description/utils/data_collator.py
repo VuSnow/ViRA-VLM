@@ -32,6 +32,9 @@ class DataCollator:
         attention_mask = answers_encoding.attention_mask
         labels = input_ids.clone()
 
+        # Mask padding tokens in labels
+        labels[attention_mask == 0] = -100
+
         sep_token_id = self.tokenizer.sep_token_id
         for i in range(labels.shape[0]):
             sep_idx = (labels[i] == sep_token_id).nonzero(as_tuple=True)[0]

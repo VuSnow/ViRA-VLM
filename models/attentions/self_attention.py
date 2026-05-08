@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from typing import Optional
-from easydict import EasyDict
 
 
 class SelfAttention(nn.Module):

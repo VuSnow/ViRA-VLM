@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from typing import Optional
-from easydict import EasyDict
 
 
 class CrossAttention(nn.Module):
@@ -94,12 +93,6 @@ class CrossAttention(nn.Module):
         if kv_mask is not None:
             kv_mask = kv_mask.to(dtype=torch.bool)
 
-        # print("kv_mask", kv_mask.shape, kv_mask.dtype, kv_mask)
-        # print("query_proj", query_proj.shape, torch.isnan(query_proj).any())
-        # print("kv_proj", kv_proj.shape, torch.isnan(kv_proj).any())
-        # print("Mask all masked:", kv_mask.all(dim=1))
-        # print("NaN in query_proj:", torch.isnan(query_proj).any())
-        # print("NaN in kv_proj:", torch.isnan(kv_proj).any())
         attn_weights = None
         if need_weights:
             attn_output, attn_weights = self.attention(
@@ -109,12 +102,6 @@ class CrossAttention(nn.Module):
                 key_padding_mask=kv_mask,
                 need_weights=True,
             )
-            # print("attn_weights shape:", attn_weights.shape)
-            # print("attn_weights stats: min", attn_weights.min().item(),
-            #     "max", attn_weights.max().item(),
-            #     "mean", attn_weights.mean().item(),
-            #     "std", attn_weights.std().item())
-            # print("attn_weights[0, :5, :5]:", attn_weights[0, :5, :5])
         else:
             attn_output, _ = self.attention(
                 query=query_proj,

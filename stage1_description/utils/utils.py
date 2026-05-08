@@ -5,17 +5,12 @@ import os
 
 
 def print_trainable_parameters(model):
-    trainable_params = 0
-    all_params = 0
-    for param in model.parameters():
-        all_params = sum(p.numel() for p in model.parameters())
-        if param.requires_grad:
-            trainable_params = sum(p.numel()
-                                   for p in model.parameters() if p.requires_grad)
+    all_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Trainable parameters: {trainable_params}")
     print(f"All parameters: {all_params}")
     print(
-        f"Trainable parameters percentage: {100 * trainable_params / all_params}")
+        f"Trainable parameters percentage: {100 * trainable_params / all_params:.2f}%")
 
 
 def check_image_validity(example, index):

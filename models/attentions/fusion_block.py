@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from typing import Optional
-from easydict import EasyDict
 from models.attentions.self_attention import SelfAttention
 from models.attentions.cross_attention import CrossAttention
 
@@ -99,27 +98,27 @@ class FusionBlock(nn.Module):
         llm_mask: Optional[torch.Tensor] = None,
         need_weights: bool = False,
     ):
-        vision_sa = self.vision_self_attn(
+        vision_sa, _ = self.vision_self_attn(
             query=vision_input, key_padding_mask=vision_mask)
-        llm_sa = self.llm_self_attn(query=llm_input, key_padding_mask=llm_mask)
+        llm_sa, _ = self.llm_self_attn(query=llm_input, key_padding_mask=llm_mask)
 
         # Bi-directional cross-attention
-        vision_cross = self.vision_cross_llm(
-            query=vision_sa["output"],
-            key_value=llm_sa["output"],
+        vision_cross_out, vision_cross_weights = self.vision_cross_llm(
+            query=vision_sa,
+            key_value=llm_sa,
             kv_mask=llm_mask,
             need_weights=need_weights,
         )
-        llm_cross = self.llm_cross_vision(
-            query=llm_sa["output"],
-            key_value=vision_sa["output"],
+        llm_cross_out, llm_cross_weights = self.llm_cross_vision(
+            query=llm_sa,
+            key_value=vision_sa,
             kv_mask=vision_mask,
             need_weights=need_weights,
         )
 
         # Residual + LayerNorm
-        vision_fused = self.vision_norm(vision_input + vision_cross["output"])
-        llm_fused = self.llm_norm(llm_input + llm_cross["output"])
+        vision_fused = self.vision_norm(vision_input + vision_cross_out)
+        llm_fused = self.llm_norm(llm_input + llm_cross_out)
 
         # FeedForward + Residual + LayerNorm
         vision_out = self.vision_norm(
@@ -129,6 +128,6 @@ class FusionBlock(nn.Module):
         return {
             "vision_output": vision_out,
             "llm_output": llm_out,
-            "vision_attn_weights": vision_cross["attn_weights"] if need_weights else None,
-            "llm_attn_weights": llm_cross["attn_weights"] if need_weights else None,
+            "vision_attn_weights": vision_cross_weights if need_weights else None,
+            "llm_attn_weights": llm_cross_weights if need_weights else None,
         }
